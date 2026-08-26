@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Node / frontend (later phases)
+node_modules/
+dist/
+build/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
