@@ -6,8 +6,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import get_current_user, require_workspace_role
 from app.crud import workspace as workspace_crud
 from app.db.session import get_db
+from app.models.roles import Role
 from app.models.user import User
-from app.models.workspace import Workspace, WorkspaceMembership, WorkspaceRole
+from app.models.workspace import Workspace, WorkspaceMembership
 from app.schemas.workspace import (
     WorkspaceCreate,
     WorkspaceMemberInvite,
@@ -42,7 +43,7 @@ async def create_workspace(
 @member_router.get("/members", response_model=list[WorkspaceMemberRead])
 async def list_workspace_members(
     workspace_id: uuid.UUID,
-    _: User = Depends(require_workspace_role(WorkspaceRole.MEMBER)),
+    _: User = Depends(require_workspace_role(Role.MEMBER)),
     db: AsyncSession = Depends(get_db),
 ) -> list[WorkspaceMembership]:
     return await workspace_crud.list_members(db, workspace_id=workspace_id)
@@ -54,7 +55,7 @@ async def list_workspace_members(
 async def invite_workspace_member(
     workspace_id: uuid.UUID,
     invite_in: WorkspaceMemberInvite,
-    _: User = Depends(require_workspace_role(WorkspaceRole.ADMIN)),
+    _: User = Depends(require_workspace_role(Role.ADMIN)),
     db: AsyncSession = Depends(get_db),
 ) -> WorkspaceMembership:
     try:

@@ -3,7 +3,8 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.workspace import Workspace, WorkspaceMembership, WorkspaceRole
+from app.models.roles import Role
+from app.models.workspace import Workspace, WorkspaceMembership
 
 
 async def get_by_id(db: AsyncSession, workspace_id: uuid.UUID) -> Workspace | None:
@@ -20,7 +21,7 @@ async def create(
 
 
 async def add_member(
-    db: AsyncSession, *, workspace_id: uuid.UUID, user_id: uuid.UUID, role: WorkspaceRole
+    db: AsyncSession, *, workspace_id: uuid.UUID, user_id: uuid.UUID, role: Role
 ) -> WorkspaceMembership:
     membership = WorkspaceMembership(workspace_id=workspace_id, user_id=user_id, role=role)
     db.add(membership)

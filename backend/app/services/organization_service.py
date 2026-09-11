@@ -7,7 +7,7 @@ from app.core.slugs import slugify
 from app.crud import organization as org_crud
 from app.crud import workspace as workspace_crud
 from app.models.organization import Organization
-from app.models.workspace import WorkspaceRole
+from app.models.roles import Role
 
 
 async def _unique_org_slug(db: AsyncSession, base: str) -> str:
@@ -33,7 +33,7 @@ async def create_organization_with_owner(
         db, name="General", slug="general", organization_id=org.id
     )
     await workspace_crud.add_member(
-        db, workspace_id=workspace.id, user_id=owner_id, role=WorkspaceRole.OWNER
+        db, workspace_id=workspace.id, user_id=owner_id, role=Role.OWNER
     )
     await db.commit()
     await db.refresh(org)

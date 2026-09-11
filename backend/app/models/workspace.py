@@ -1,26 +1,11 @@
 import uuid
-from enum import StrEnum
 
-from sqlalchemy import Enum as SAEnum
 from sqlalchemy import ForeignKey, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
-
-
-class WorkspaceRole(StrEnum):
-    OWNER = "owner"
-    ADMIN = "admin"
-    MEMBER = "member"
-
-
-# Role rank for "minimum role" permission checks — higher number = more privilege.
-ROLE_RANK: dict[WorkspaceRole, int] = {
-    WorkspaceRole.MEMBER: 0,
-    WorkspaceRole.ADMIN: 1,
-    WorkspaceRole.OWNER: 2,
-}
+from app.models.roles import Role, member_role_column
 
 
 class Workspace(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -36,6 +21,7 @@ class Workspace(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     memberships: Mapped[list["WorkspaceMembership"]] = relationship(
         back_populates="workspace", cascade="all, delete-orphan"
     )
+    projects: Mapped[list["Project"]] = relationship(cascade="all, delete-orphan")  # noqa: F821
 
     __table_args__ = (UniqueConstraint("organization_id", "slug", name="uq_workspace_org_slug"),)
 
@@ -49,15 +35,7 @@ class WorkspaceMembership(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     user_id: Mapped[uuid.UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True
     )
-    role: Mapped[WorkspaceRole] = mapped_column(
-        SAEnum(
-            WorkspaceRole,
-            name="workspace_role",
-            values_callable=lambda enum_cls: [member.value for member in enum_cls],
-        ),
-        nullable=False,
-        default=WorkspaceRole.MEMBER,
-    )
+    role: Mapped[Role] = mapped_column(member_role_column(), nullable=False, default=Role.MEMBER)
 
     workspace: Mapped["Workspace"] = relationship(back_populates="memberships")
     user: Mapped["User"] = relationship()  # noqa: F821

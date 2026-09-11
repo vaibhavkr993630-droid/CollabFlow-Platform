@@ -9,7 +9,7 @@ from app.crud import user as user_crud
 from app.crud import workspace as workspace_crud
 from app.db.session import get_db
 from app.models.user import User
-from app.models.workspace import ROLE_RANK, WorkspaceRole
+from app.models.roles import ROLE_RANK, Role
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
@@ -34,7 +34,7 @@ async def get_current_user(
     return user
 
 
-def require_workspace_role(min_role: WorkspaceRole):
+def require_workspace_role(min_role: Role):
     """
     Returns a FastAPI dependency that ensures the current user is a member of the
     workspace identified by the `workspace_id` path parameter, with at least

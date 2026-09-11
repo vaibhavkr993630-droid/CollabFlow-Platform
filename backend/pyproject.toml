@@ -36,6 +36,7 @@ include = ["app*"]
 
 [tool.ruff]
 line-length = 100
+extend-exclude = ["migrations/versions"]
 
 [tool.ruff.lint]
 select = ["E", "F", "B", "UP", "RUF"]

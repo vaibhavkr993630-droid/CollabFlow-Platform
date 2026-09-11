@@ -2,7 +2,7 @@ import uuid
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
-from app.models.workspace import WorkspaceRole
+from app.models.roles import Role
 
 
 class WorkspaceCreate(BaseModel):
@@ -20,7 +20,7 @@ class WorkspaceRead(BaseModel):
 
 class WorkspaceMemberInvite(BaseModel):
     email: EmailStr
-    role: WorkspaceRole = WorkspaceRole.MEMBER
+    role: Role = Role.MEMBER
 
 
 class WorkspaceMemberRead(BaseModel):
@@ -28,4 +28,4 @@ class WorkspaceMemberRead(BaseModel):
 
     id: uuid.UUID
     user_id: uuid.UUID
-    role: WorkspaceRole
+    role: Role

@@ -6,7 +6,8 @@ from app.core.slugs import slugify
 from app.crud import organization as org_crud
 from app.crud import user as user_crud
 from app.crud import workspace as workspace_crud
-from app.models.workspace import Workspace, WorkspaceMembership, WorkspaceRole
+from app.models.roles import Role
+from app.models.workspace import Workspace, WorkspaceMembership
 
 
 class WorkspaceServiceError(Exception):
@@ -24,7 +25,7 @@ async def create_workspace(
         db, name=name, slug=slugify(name), organization_id=organization_id
     )
     await workspace_crud.add_member(
-        db, workspace_id=workspace.id, user_id=creator_id, role=WorkspaceRole.OWNER
+        db, workspace_id=workspace.id, user_id=creator_id, role=Role.OWNER
     )
     await db.commit()
     await db.refresh(workspace)
@@ -32,7 +33,7 @@ async def create_workspace(
 
 
 async def invite_member(
-    db: AsyncSession, *, workspace_id: uuid.UUID, email: str, role: WorkspaceRole
+    db: AsyncSession, *, workspace_id: uuid.UUID, email: str, role: Role
 ) -> WorkspaceMembership:
     user = await user_crud.get_by_email(db, email)
     if user is None:
