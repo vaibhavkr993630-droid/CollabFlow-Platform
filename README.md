@@ -7,7 +7,7 @@
 
 <p align="center">
   <img alt="Status" src="https://img.shields.io/badge/status-in%20development-blue">
-  <img alt="Phase" src="https://img.shields.io/badge/phase-1%20of%209%20%E2%80%94%20foundation-brightgreen">
+  <img alt="Phase" src="https://img.shields.io/badge/phase-2%20of%209%20%E2%80%94%20auth%20%26%20core%20domain-brightgreen">
   <img alt="Backend" src="https://img.shields.io/badge/backend-FastAPI%20%2B%20async%20SQLAlchemy-009688">
   <img alt="Python" src="https://img.shields.io/badge/python-3.12%2B-3776AB">
   <img alt="License" src="https://img.shields.io/badge/license-MIT-black">
@@ -38,24 +38,54 @@ reviewable slice of functionality with its own migration, tests, and progress no
 | Background jobs | **Celery + Redis** *(Phase 5)* | Email notifications and scheduled reminders off the request path |
 | File storage | **S3-compatible object storage / MinIO** *(Phase 6)* | Attachments never touch the app server's disk; downloads use presigned URLs |
 
-## Data model (Phase 1)
+## Data model (Phase 1 + 2)
 
 ```
 users ──< workspace_memberships >── workspaces >── organizations >── users (owner)
-                    │
-                  role: owner | admin | member
+  │                                      │
+  │                                      └──< projects ──< project_memberships >── users
+  │                                                │
+  │                                                ├──< tasks ──< comments >── users (author)
+  │                                                │       │  └─< task_labels >── labels
+  │                                                │       └─ parent_task_id (subtasks, self-FK)
+  │                                                └──< labels
+  └──────────────────────────────────────────────────────────────────────────────────────────
+                     role (workspace_memberships / project_memberships): owner | admin | member
 ```
 
 - **User** — email (unique, indexed), hashed password, full name, active flag.
 - **Organization** — the billing/ownership boundary. Has a unique `slug` and an `owner_id`.
 - **Workspace** — a team space inside an organization. `slug` is unique **per organization**
   (`uq_workspace_org_slug`), not globally.
-- **WorkspaceMembership** — join table carrying a `role` enum. One row per `(workspace, user)`
-  pair (`uq_membership_workspace_user`). Role rank (`member < admin < owner`) drives the
-  "minimum role" permission checks added in Phase 2.
+- **WorkspaceMembership / ProjectMembership** — join tables carrying a shared `Role` enum
+  (`app/models/roles.py`), backed by one Postgres enum (`member_role`). One row per
+  `(workspace, user)` or `(project, user)` pair. `ROLE_RANK` (`member < admin < owner`) drives
+  every "minimum role" RBAC dependency.
+- **Project** — lives inside a workspace; creating one seeds the creator as an Owner-role member.
+- **Task** — `status` / `priority` enums, optional `assignee_id`, self-referential
+  `parent_task_id` for subtasks, `position` reserved for Kanban ordering.
+- **Label** — project-scoped, many-to-many with tasks via `task_labels`.
+- **Comment** — `task_id` / `author_id` / `body`.
 
 Every table uses a UUID primary key (`default=uuid4`, generated app-side) and timezone-aware
 `created_at` / `updated_at` columns via shared mixins in [`app/db/base.py`](backend/app/db/base.py).
+
+## API surface (Phase 1 + 2)
+
+```
+POST   /api/auth/register | login | refresh        GET /api/auth/me
+POST   /api/organizations                           GET  /api/organizations
+POST   /api/organizations/{org_id}/workspaces        GET  .../workspaces
+GET/POST  /api/workspaces/{workspace_id}/members
+POST   /api/workspaces/{workspace_id}/projects        GET  .../projects
+GET/POST  /api/projects/{project_id}/members
+POST   /api/projects/{project_id}/tasks               GET  .../tasks
+GET/PATCH/DELETE  /api/tasks/{task_id}                 GET  .../subtasks
+POST   /api/projects/{project_id}/labels               GET  .../labels
+POST   /api/tasks/{task_id}/comments                    GET  .../comments
+```
+
+Full interactive docs at `/docs` once the server is running.
 
 ## Quickstart
 
@@ -93,7 +123,7 @@ pytest
 | Phase | Scope | State |
 |------:|-------|:-----:|
 | **1** | Foundation — app skeleton, typed settings, async DB layer, org/workspace/membership models, first migration | ✅ **Done** |
-| 2 | Auth (JWT register/login/refresh) + RBAC dependencies + projects, tasks, labels, comments | ⏳ Planned |
+| **2** | Auth (JWT register/login/refresh) + RBAC dependencies + projects, tasks, labels, comments | ✅ **Done** |
 | 3 | Activity log + task filtering, sorting, search, pagination | ⏳ Planned |
 | 4 | Real-time: WebSocket endpoint, Redis pub/sub fan-out, presence tracking | ⏳ Planned |
 | 5 | Notifications (in-app + email via Celery) + due-soon reminders | ⏳ Planned |
