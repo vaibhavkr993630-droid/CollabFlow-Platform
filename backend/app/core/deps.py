@@ -5,11 +5,14 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import InvalidTokenError, TokenType, decode_token
+from app.crud import project as project_crud
+from app.crud import task as task_crud
 from app.crud import user as user_crud
 from app.crud import workspace as workspace_crud
 from app.db.session import get_db
-from app.models.user import User
 from app.models.roles import ROLE_RANK, Role
+from app.models.task import Task
+from app.models.user import User
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
@@ -61,5 +64,69 @@ def require_workspace_role(min_role: Role):
                 detail=f"Requires at least '{min_role.value}' role in this workspace",
             )
         return current_user
+
+    return _check
+
+
+def require_project_role(min_role: Role):
+    """
+    Same idea as require_workspace_role, but checks membership in the project
+    identified by the `project_id` path parameter. Project and workspace roles are
+    independent — a workspace Owner is not automatically a member of every project.
+    """
+
+    async def _check(
+        project_id: uuid.UUID = Path(...),
+        current_user: User = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db),
+    ) -> User:
+        membership = await project_crud.get_membership(
+            db, project_id=project_id, user_id=current_user.id
+        )
+        if membership is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not a member of this project",
+            )
+        if ROLE_RANK[membership.role] < ROLE_RANK[min_role]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Requires at least '{min_role.value}' role in this project",
+            )
+        return current_user
+
+    return _check
+
+
+def require_task_project_role(min_role: Role):
+    """
+    For routes keyed on `task_id` rather than `project_id` (task detail, comments,
+    subtasks): loads the task, then checks the current user's role in *its* project.
+    Returns the loaded Task so route handlers don't need to re-fetch it.
+    """
+
+    async def _check(
+        task_id: uuid.UUID = Path(...),
+        current_user: User = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db),
+    ) -> Task:
+        task = await task_crud.get_by_id(db, task_id)
+        if task is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+
+        membership = await project_crud.get_membership(
+            db, project_id=task.project_id, user_id=current_user.id
+        )
+        if membership is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not a member of this task's project",
+            )
+        if ROLE_RANK[membership.role] < ROLE_RANK[min_role]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Requires at least '{min_role.value}' role in this project",
+            )
+        return task
 
     return _check
