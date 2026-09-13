@@ -1,3 +1,4 @@
+from app.models.activity import ActivityAction, ActivityLog
 from app.models.comment import Comment
 from app.models.label import Label, task_labels
 from app.models.organization import Organization
@@ -8,6 +9,8 @@ from app.models.user import User
 from app.models.workspace import Workspace, WorkspaceMembership
 
 __all__ = [
+    "ActivityAction",
+    "ActivityLog",
     "Comment",
     "Label",
     "Organization",
