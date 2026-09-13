@@ -7,7 +7,7 @@
 
 <p align="center">
   <img alt="Status" src="https://img.shields.io/badge/status-in%20development-blue">
-  <img alt="Phase" src="https://img.shields.io/badge/phase-2%20of%209%20%E2%80%94%20auth%20%26%20core%20domain-brightgreen">
+  <img alt="Phase" src="https://img.shields.io/badge/phase-3%20of%209%20%E2%80%94%20activity%20%26%20search-brightgreen">
   <img alt="Backend" src="https://img.shields.io/badge/backend-FastAPI%20%2B%20async%20SQLAlchemy-009688">
   <img alt="Python" src="https://img.shields.io/badge/python-3.12%2B-3776AB">
   <img alt="License" src="https://img.shields.io/badge/license-MIT-black">
@@ -70,7 +70,7 @@ users ──< workspace_memberships >── workspaces >── organizations >�
 Every table uses a UUID primary key (`default=uuid4`, generated app-side) and timezone-aware
 `created_at` / `updated_at` columns via shared mixins in [`app/db/base.py`](backend/app/db/base.py).
 
-## API surface (Phase 1 + 2)
+## API surface (Phase 1–3)
 
 ```
 POST   /api/auth/register | login | refresh        GET /api/auth/me
@@ -79,10 +79,14 @@ POST   /api/organizations/{org_id}/workspaces        GET  .../workspaces
 GET/POST  /api/workspaces/{workspace_id}/members
 POST   /api/workspaces/{workspace_id}/projects        GET  .../projects
 GET/POST  /api/projects/{project_id}/members
-POST   /api/projects/{project_id}/tasks               GET  .../tasks
+POST   /api/projects/{project_id}/tasks
+GET    /api/projects/{project_id}/tasks?status=&priority=&assignee_id=&label_id=
+                                        &search=&sort_by=&sort_order=&page=&page_size=
 GET/PATCH/DELETE  /api/tasks/{task_id}                 GET  .../subtasks
 POST   /api/projects/{project_id}/labels               GET  .../labels
 POST   /api/tasks/{task_id}/comments                    GET  .../comments
+GET    /api/projects/{project_id}/activity?page=&page_size=
+GET    /api/tasks/{task_id}/activity?page=&page_size=
 ```
 
 Full interactive docs at `/docs` once the server is running.
@@ -124,7 +128,7 @@ pytest
 |------:|-------|:-----:|
 | **1** | Foundation — app skeleton, typed settings, async DB layer, org/workspace/membership models, first migration | ✅ **Done** |
 | **2** | Auth (JWT register/login/refresh) + RBAC dependencies + projects, tasks, labels, comments | ✅ **Done** |
-| 3 | Activity log + task filtering, sorting, search, pagination | ⏳ Planned |
+| **3** | Activity log + task filtering, sorting, search, pagination | ✅ **Done** |
 | 4 | Real-time: WebSocket endpoint, Redis pub/sub fan-out, presence tracking | ⏳ Planned |
 | 5 | Notifications (in-app + email via Celery) + due-soon reminders | ⏳ Planned |
 | 6 | File attachments on tasks (S3-compatible storage, presigned downloads) | ⏳ Planned |

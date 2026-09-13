@@ -128,5 +128,67 @@ pytest                     # auth + RBAC + project/task/label/comment suite
 
 ### Next
 
-**Phase 3 — Activity log & filtering:** an `ActivityLog` model recording who did what, plus
-task filtering, sorting, search, and pagination query parameters.
+Phase 2 is done. Next: Phase 3 (activity log, task filtering/sorting/search/pagination).
+
+---
+
+## Phase 3 — Activity Log & Search ✅
+
+**Goal:** every state-changing action leaves an audit trail, and task lists stop being
+"fetch everything and filter client-side" — real filtering, sorting, search, and pagination
+on the server.
+
+### Delivered
+
+- **`ActivityLog`** (`app/models/activity.py`) — append-only, written only by
+  `activity_service.log(...)`, called from inside project/task/label/comment services right
+  after their write, in the **same transaction** (flushed, not committed separately — the log
+  entry only persists if the action it describes actually commits). Covers: project created,
+  member invited, task created/updated/deleted, comment added, label created.
+- **Activity feeds** — `GET /api/projects/{project_id}/activity` and
+  `GET /api/tasks/{task_id}/activity`, both paginated (`page`/`page_size`, capped at 100),
+  newest first, RBAC'd through the existing `require_project_role` /
+  `require_task_project_role` dependencies — no new permission logic needed.
+- **Task list filtering/sorting/search/pagination** —
+  `GET /api/projects/{project_id}/tasks` now takes `status`, `priority`, `assignee_id`,
+  `label_id`, `search` (title `ILIKE`), `sort_by` (`created_at` / `due_date` / `priority` /
+  `status` / `position` / `title`), `sort_order` (`asc`/`desc`), `page`, `page_size` — all
+  optional. Response changed from a bare list to `{items, total, page, page_size}`.
+- **Closed a gap from Phase 2**: `TaskUpdate.label_ids` (full-replace) — Phase 2 built labels
+  but never wired up attaching them to a task, which would have made the new `label_id` filter
+  untestable. Added now rather than left as dead functionality.
+
+### Decisions
+
+- **`task_id` FK is `ON DELETE SET NULL`, not `CASCADE`** — a task's activity history should
+  outlive the task itself. Deleting a task nulls `task_id` on *every* historical entry that
+  referenced it (not just a "task deleted" entry) — correct Postgres FK semantics, verified
+  against a live migrated database, not assumed.
+- **`activity_metadata`, not `metadata`** — `metadata` is reserved by SQLAlchemy's declarative
+  `Base.metadata`; the column holds actual structured detail as JSONB (e.g. which fields changed
+  on a `task_updated` row).
+- **Sort fields, not a bare column name** — `sort_by` is a closed `TaskSortField` enum mapped to
+  actual columns server-side, not a raw string interpolated into `ORDER BY`. Status/priority sort
+  correctly by severity (`todo < in_progress < in_review < done`,
+  `low < medium < high < urgent`) because that's the *definition order* of the underlying
+  Postgres native enum, which Postgres uses for ordering — chosen deliberately to match.
+- **Search is a plain `ILIKE` on title**, not `tsvector`/GIN — full scans are fine at this data
+  scale; the brief's guidance was "add full-text search only if needed," and it isn't yet.
+- **The `{items, total, page, page_size}` envelope is a breaking change to Phase 2's task-list
+  contract**, made deliberately rather than adding pagination as a second endpoint alongside the
+  old bare-list one.
+
+### Verify
+
+```bash
+docker compose up -d postgres redis
+cd backend && pip install -e ".[dev]" && cp .env.example .env
+alembic upgrade head       # now at fd31448fb5dc
+uvicorn app.main:app --reload
+pytest                     # + activity log, filtering, sort, search, pagination
+```
+
+### Next
+
+**Phase 4 — Real-time:** WebSocket connection manager, Redis pub/sub, broadcasting task/comment
+changes to project "rooms," and presence tracking.
