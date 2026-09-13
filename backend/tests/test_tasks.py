@@ -39,7 +39,9 @@ async def test_create_and_list_tasks(client: AsyncClient):
         f"/api/projects/{project_id}/tasks", headers=auth_headers(token)
     )
     assert list_resp.status_code == 200
-    assert len(list_resp.json()) == 1
+    body = list_resp.json()
+    assert body["total"] == 1
+    assert len(body["items"]) == 1
 
 
 async def test_assignee_must_be_project_member(client: AsyncClient):
