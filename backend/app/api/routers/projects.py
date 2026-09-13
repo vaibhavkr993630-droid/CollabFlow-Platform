@@ -65,12 +65,16 @@ async def list_project_members(
 async def invite_project_member(
     project_id: uuid.UUID,
     invite_in: ProjectMemberInvite,
-    _: User = Depends(require_project_role(Role.ADMIN)),
+    current_user: User = Depends(require_project_role(Role.ADMIN)),
     db: AsyncSession = Depends(get_db),
 ) -> ProjectMembership:
     try:
         return await project_service.invite_member(
-            db, project_id=project_id, email=invite_in.email, role=invite_in.role
+            db,
+            project_id=project_id,
+            email=invite_in.email,
+            role=invite_in.role,
+            actor_id=current_user.id,
         )
     except ProjectServiceError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc

@@ -20,12 +20,16 @@ router = APIRouter(prefix="/api/projects/{project_id}/labels", tags=["labels"])
 async def create_label(
     project_id: uuid.UUID,
     label_in: LabelCreate,
-    _: User = Depends(require_project_role(Role.ADMIN)),
+    current_user: User = Depends(require_project_role(Role.ADMIN)),
     db: AsyncSession = Depends(get_db),
 ) -> Label:
     try:
         return await label_service.create_label(
-            db, project_id=project_id, name=label_in.name, color=label_in.color
+            db,
+            project_id=project_id,
+            name=label_in.name,
+            color=label_in.color,
+            actor_id=current_user.id,
         )
     except LabelServiceError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc

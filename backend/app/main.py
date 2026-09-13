@@ -1,7 +1,16 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routers import auth, comments, labels, organizations, projects, tasks, workspaces
+from app.api.routers import (
+    activity,
+    auth,
+    comments,
+    labels,
+    organizations,
+    projects,
+    tasks,
+    workspaces,
+)
 from app.core.config import get_settings
 
 settings = get_settings()
@@ -26,6 +35,8 @@ app.include_router(tasks.project_router)
 app.include_router(tasks.task_router)
 app.include_router(labels.router)
 app.include_router(comments.router)
+app.include_router(activity.project_router)
+app.include_router(activity.task_router)
 
 
 @app.get("/health")
