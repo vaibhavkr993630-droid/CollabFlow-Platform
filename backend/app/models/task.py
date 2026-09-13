@@ -25,6 +25,20 @@ class TaskPriority(StrEnum):
     URGENT = "urgent"
 
 
+class TaskSortField(StrEnum):
+    CREATED_AT = "created_at"
+    DUE_DATE = "due_date"
+    PRIORITY = "priority"
+    STATUS = "status"
+    POSITION = "position"
+    TITLE = "title"
+
+
+class SortOrder(StrEnum):
+    ASC = "asc"
+    DESC = "desc"
+
+
 def _task_status_column() -> SAEnum:
     return SAEnum(
         TaskStatus,

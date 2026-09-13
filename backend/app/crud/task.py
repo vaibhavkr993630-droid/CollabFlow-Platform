@@ -4,7 +4,17 @@ from datetime import date
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.task import Task, TaskPriority, TaskStatus
+from app.models.label import task_labels
+from app.models.task import SortOrder, Task, TaskPriority, TaskSortField, TaskStatus
+
+_SORT_COLUMNS = {
+    TaskSortField.CREATED_AT: Task.created_at,
+    TaskSortField.DUE_DATE: Task.due_date,
+    TaskSortField.PRIORITY: Task.priority,
+    TaskSortField.STATUS: Task.status,
+    TaskSortField.POSITION: Task.position,
+    TaskSortField.TITLE: Task.title,
+}
 
 
 async def get_by_id(db: AsyncSession, task_id: uuid.UUID) -> Task | None:
@@ -48,13 +58,49 @@ async def create(
     return task
 
 
-async def list_by_project(db: AsyncSession, *, project_id: uuid.UUID) -> list[Task]:
+async def list_by_project(
+    db: AsyncSession,
+    *,
+    project_id: uuid.UUID,
+    status: TaskStatus | None = None,
+    priority: TaskPriority | None = None,
+    assignee_id: uuid.UUID | None = None,
+    label_id: uuid.UUID | None = None,
+    search: str | None = None,
+    sort_by: TaskSortField = TaskSortField.POSITION,
+    sort_order: SortOrder = SortOrder.ASC,
+    page: int = 1,
+    page_size: int = 20,
+) -> tuple[list[Task], int]:
+    conditions = [Task.project_id == project_id, Task.parent_task_id.is_(None)]
+    if status is not None:
+        conditions.append(Task.status == status)
+    if priority is not None:
+        conditions.append(Task.priority == priority)
+    if assignee_id is not None:
+        conditions.append(Task.assignee_id == assignee_id)
+    if search is not None:
+        conditions.append(Task.title.ilike(f"%{search}%"))
+
+    base_query = select(Task).where(*conditions)
+    count_query = select(func.count(func.distinct(Task.id))).where(*conditions)
+    if label_id is not None:
+        base_query = base_query.join(task_labels, task_labels.c.task_id == Task.id).where(
+            task_labels.c.label_id == label_id
+        )
+        count_query = count_query.join(task_labels, task_labels.c.task_id == Task.id).where(
+            task_labels.c.label_id == label_id
+        )
+
+    total = await db.scalar(count_query) or 0
+
+    sort_column = _SORT_COLUMNS[sort_by]
+    order_clause = sort_column.desc() if sort_order == SortOrder.DESC else sort_column.asc()
+
     result = await db.execute(
-        select(Task)
-        .where(Task.project_id == project_id, Task.parent_task_id.is_(None))
-        .order_by(Task.status, Task.position)
+        base_query.order_by(order_clause).offset((page - 1) * page_size).limit(page_size)
     )
-    return list(result.scalars().all())
+    return list(result.scalars().all()), total
 
 
 async def list_subtasks(db: AsyncSession, *, parent_task_id: uuid.UUID) -> list[Task]:

@@ -24,6 +24,9 @@ class TaskUpdate(BaseModel):
     priority: TaskPriority | None = None
     assignee_id: uuid.UUID | None = None
     due_date: date | None = None
+    # Full replace, not incremental add/remove — simpler contract for a v1 task
+    # editor that just re-sends the whole label set from a multi-select.
+    label_ids: list[uuid.UUID] | None = None
 
 
 class TaskRead(BaseModel):
@@ -43,3 +46,10 @@ class TaskRead(BaseModel):
     labels: list[LabelRead]
     created_at: datetime
     updated_at: datetime
+
+
+class TaskListResponse(BaseModel):
+    items: list[TaskRead]
+    total: int
+    page: int
+    page_size: int

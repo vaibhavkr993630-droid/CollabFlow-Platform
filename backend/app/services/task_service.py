@@ -3,9 +3,12 @@ from datetime import date
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.crud import label as label_crud
 from app.crud import project as project_crud
 from app.crud import task as task_crud
+from app.models.activity import ActivityAction
 from app.models.task import Task, TaskPriority, TaskStatus
+from app.services import activity_service
 
 
 class TaskServiceError(Exception):
@@ -53,23 +56,76 @@ async def create_task(
         parent_task_id=parent_task_id,
         created_by_id=created_by_id,
     )
+    await activity_service.log(
+        db,
+        project_id=project_id,
+        task_id=task.id,
+        actor_id=created_by_id,
+        action=ActivityAction.TASK_CREATED,
+        summary=f"created task '{title}'",
+    )
     await db.commit()
     await db.refresh(task)
     return task
 
 
-async def update_task(db: AsyncSession, *, task: Task, updates: dict) -> Task:
+async def _resolve_labels(
+    db: AsyncSession, *, project_id: uuid.UUID, label_ids: list[uuid.UUID]
+) -> list:
+    labels = []
+    for label_id in label_ids:
+        label = await label_crud.get_by_id(db, label_id)
+        if label is None or label.project_id != project_id:
+            raise TaskServiceError("Label must belong to the same project as the task")
+        labels.append(label)
+    return labels
+
+
+async def update_task(db: AsyncSession, *, task: Task, updates: dict, actor_id: uuid.UUID) -> Task:
     if "assignee_id" in updates and updates["assignee_id"] is not None:
         await _validate_assignee(db, project_id=task.project_id, assignee_id=updates["assignee_id"])
 
-    for field, value in updates.items():
-        setattr(task, field, value)
+    label_ids = updates.pop("label_ids", None)
+
+    changes = {}
+    for field, new_value in updates.items():
+        old_value = getattr(task, field)
+        if old_value != new_value:
+            changes[field] = {"old": str(old_value), "new": str(new_value)}
+        setattr(task, field, new_value)
+
+    if label_ids is not None:
+        old_label_names = sorted(label.name for label in task.labels)
+        task.labels = await _resolve_labels(db, project_id=task.project_id, label_ids=label_ids)
+        new_label_names = sorted(label.name for label in task.labels)
+        if old_label_names != new_label_names:
+            changes["labels"] = {"old": old_label_names, "new": new_label_names}
+
+    if changes:
+        changed_fields = ", ".join(sorted(changes))
+        await activity_service.log(
+            db,
+            project_id=task.project_id,
+            task_id=task.id,
+            actor_id=actor_id,
+            action=ActivityAction.TASK_UPDATED,
+            summary=f"updated task '{task.title}' ({changed_fields})",
+            metadata={"changes": changes},
+        )
 
     await db.commit()
     await db.refresh(task)
     return task
 
 
-async def delete_task(db: AsyncSession, *, task: Task) -> None:
+async def delete_task(db: AsyncSession, *, task: Task, actor_id: uuid.UUID) -> None:
+    await activity_service.log(
+        db,
+        project_id=task.project_id,
+        task_id=None,  # the task row is about to be deleted — don't leave a dangling FK
+        actor_id=actor_id,
+        action=ActivityAction.TASK_DELETED,
+        summary=f"deleted task '{task.title}'",
+    )
     await task_crud.delete(db, task)
     await db.commit()

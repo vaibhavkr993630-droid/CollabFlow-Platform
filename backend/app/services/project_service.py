@@ -6,8 +6,10 @@ from app.core.slugs import slugify
 from app.crud import project as project_crud
 from app.crud import user as user_crud
 from app.crud import workspace as workspace_crud
+from app.models.activity import ActivityAction
 from app.models.project import Project, ProjectMembership
 from app.models.roles import Role
+from app.services import activity_service
 
 
 class ProjectServiceError(Exception):
@@ -29,8 +31,13 @@ async def create_project(
     project = await project_crud.create(
         db, name=name, slug=slugify(name), description=description, workspace_id=workspace_id
     )
-    await project_crud.add_member(
-        db, project_id=project.id, user_id=creator_id, role=Role.OWNER
+    await project_crud.add_member(db, project_id=project.id, user_id=creator_id, role=Role.OWNER)
+    await activity_service.log(
+        db,
+        project_id=project.id,
+        actor_id=creator_id,
+        action=ActivityAction.PROJECT_CREATED,
+        summary=f"created project '{name}'",
     )
     await db.commit()
     await db.refresh(project)
@@ -38,7 +45,7 @@ async def create_project(
 
 
 async def invite_member(
-    db: AsyncSession, *, project_id: uuid.UUID, email: str, role: Role
+    db: AsyncSession, *, project_id: uuid.UUID, email: str, role: Role, actor_id: uuid.UUID
 ) -> ProjectMembership:
     user = await user_crud.get_by_email(db, email)
     if user is None:
@@ -50,6 +57,13 @@ async def invite_member(
 
     membership = await project_crud.add_member(
         db, project_id=project_id, user_id=user.id, role=role
+    )
+    await activity_service.log(
+        db,
+        project_id=project_id,
+        actor_id=actor_id,
+        action=ActivityAction.MEMBER_INVITED,
+        summary=f"invited {email} as {role.value}",
     )
     await db.commit()
     await db.refresh(membership)
