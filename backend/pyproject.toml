@@ -25,6 +25,7 @@ dev = [
     "httpx>=0.27",
     "aiosqlite>=0.20",
     "ruff>=0.7",
+    "websockets>=13",  # starlette.testclient's websocket_connect() uses this under the hood
 ]
 
 [tool.pytest.ini_options]
