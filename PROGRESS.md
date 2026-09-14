@@ -190,5 +190,89 @@ pytest                     # + activity log, filtering, sort, search, pagination
 
 ### Next
 
-**Phase 4 — Real-time:** WebSocket connection manager, Redis pub/sub, broadcasting task/comment
-changes to project "rooms," and presence tracking.
+Phase 3 is done. Next: Phase 4 (WebSockets, Redis pub/sub, presence).
+
+---
+
+## Phase 4 — Real-Time ✅
+
+**Goal:** task and comment changes, and who's currently looking at a project, propagate to
+every connected client live — no polling.
+
+### Delivered
+
+- **`ConnectionManager`** (`app/ws/connection_manager.py`) — process-local registry of live
+  WebSocket connections, keyed `(project_id, user_id) -> set of sockets` (a set, not one socket,
+  since a user can hold multiple tabs open to the same project). Its only job is fanning a
+  message out to local sockets; it never decides *what* to broadcast.
+- **Redis client singleton** (`app/core/redis.py`), mirroring the DB engine singleton pattern.
+- **Events** (`app/ws/events.py`) — every event (task created/updated/deleted, comment created,
+  presence joined/left/snapshot) publishes to a per-project Redis channel
+  (`project:{id}:events`) — never pushed to local sockets directly, even by the instance that
+  triggered it.
+- **`redis_listener.py`** — one long-lived background task, started in `main.py`'s `lifespan`,
+  pattern-subscribed once to `project:*:events` (not one subscription per active project),
+  relaying every message to `connection_manager.send_to_project`.
+- **Presence** (`app/ws/presence.py`) — a Redis hash of `user_id -> open-connection-count` per
+  project. `GET /api/projects/{project_id}/presence` exposes the same data over REST.
+- **`WS /ws/projects/{project_id}`** — auth via `require_ws_project_role`, token as a `?token=`
+  query param. On connect: presence snapshot sent to the new socket, *then* a `PRESENCE_JOINED`
+  broadcast to everyone else. On disconnect: presence leave, `PRESENCE_LEFT` broadcast only if
+  the count hits zero.
+- **Task/comment writes now broadcast** after their DB transaction commits — a side effect that
+  should only fire once the change is actually durable, unlike activity-log entries which log
+  inside the same transaction.
+- No new migration — Phase 4 state (presence, pub/sub) is entirely Redis-resident and
+  intentionally never touches Postgres.
+
+### Four bugs found and fixed (three of them concurrency-shaped)
+
+1. **Presence-snapshot/self-join ordering race.** Publishing `PRESENCE_JOINED` before sending
+   the new client its own snapshot let the Redis listener relay that join event back to the
+   client before the direct snapshot send completed — a client could see itself "join" before
+   knowing who else was online. Fixed by fully completing the snapshot send before publishing
+   anything to Redis.
+2. **WS auth wasn't overridable in tests.** A hand-rolled DB session inside the route bypassed
+   the same `Depends(get_db)` pattern every HTTP route uses, so `tests/conftest.py`'s DB override
+   had no effect — tests would have silently hit the real dev database. Fixed by discovering
+   FastAPI/Starlette support raising `WebSocketException` from a `Depends()` (it closes the
+   socket automatically, before accept), making auth a normal overridable dependency.
+3. **Redis client singleton broke across pytest's per-test event loops** — identical root cause
+   to the `NullPool` fix for the DB engine, but for `redis.asyncio.Redis`: a module-level
+   singleton binds to whichever event loop first creates it, and pytest-asyncio hands each test a
+   fresh loop. Fixed with an autouse fixture that closes and resets the singleton after every
+   test.
+4. **`send_to_project` iterated a live, mutable set while `await`ing inside the loop.**
+   `websocket.send_json(...)` yields control back to the event loop; a real client disconnecting
+   at that exact moment mutates the very dict/set structure being iterated, raising a
+   "changed size during iteration" error. Fixed by snapshotting both the outer dict and each
+   inner set into plain lists before the loop starts.
+
+### Known simplifications
+
+- WS auth token travels as `?token=...`, not a header — browsers' native WebSocket API can't set
+  custom headers on the handshake. Tradeoff: the access token can appear in server access logs.
+  A production system would issue a short-lived, single-use WS ticket via an authenticated REST
+  call instead.
+- Redis pub/sub fan-out is real, exercised on every event, but only one backend instance runs in
+  this project's setup — the "reaches clients on a different instance" benefit is
+  architecturally present, not something this deployment currently needs.
+- `presence.leave`'s decrement-then-conditional-delete isn't a single atomic operation — a rare
+  race between two concurrent disconnects at the exact moment a count hits zero could
+  theoretically leave a stale zero-count entry. Not fixed with Lua scripting given the scope.
+- No client-side reconnect/backoff logic yet — that's a Phase 7 (frontend) concern.
+
+### Verify
+
+```bash
+docker compose up -d postgres redis
+cd backend && pip install -e ".[dev]" && cp .env.example .env
+alembic upgrade head       # unchanged — no new migration this phase
+uvicorn app.main:app --reload
+pytest                     # + WebSocket connect/auth/broadcast/presence
+```
+
+### Next
+
+**Phase 5 — Notifications:** in-app notifications over their own WebSocket, persisted rows,
+Celery + Redis for email delivery, and a daily due-soon reminder job.

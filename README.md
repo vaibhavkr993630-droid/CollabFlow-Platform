@@ -7,7 +7,7 @@
 
 <p align="center">
   <img alt="Status" src="https://img.shields.io/badge/status-in%20development-blue">
-  <img alt="Phase" src="https://img.shields.io/badge/phase-3%20of%209%20%E2%80%94%20activity%20%26%20search-brightgreen">
+  <img alt="Phase" src="https://img.shields.io/badge/phase-4%20of%209%20%E2%80%94%20real--time-brightgreen">
   <img alt="Backend" src="https://img.shields.io/badge/backend-FastAPI%20%2B%20async%20SQLAlchemy-009688">
   <img alt="Python" src="https://img.shields.io/badge/python-3.12%2B-3776AB">
   <img alt="License" src="https://img.shields.io/badge/license-MIT-black">
@@ -34,7 +34,7 @@ reviewable slice of functionality with its own migration, tests, and progress no
 | ORM | **SQLAlchemy 2.0** (async, typed `Mapped[...]`) | Fully typed models, explicit unit-of-work, async engine over `asyncpg` |
 | Database | **PostgreSQL 16** | Native `uuid`, enum types, and constraint support the domain leans on |
 | Migrations | **Alembic** (async env) | Every schema change is a versioned, reviewable script — no auto-sync in any environment |
-| Real-time | **WebSockets + Redis pub/sub** *(Phase 4)* | Horizontal-scale-ready fan-out: any instance can deliver an event to any connected client |
+| Real-time | **WebSockets + Redis pub/sub** | Horizontal-scale-ready fan-out: any instance can deliver an event to any connected client |
 | Background jobs | **Celery + Redis** *(Phase 5)* | Email notifications and scheduled reminders off the request path |
 | File storage | **S3-compatible object storage / MinIO** *(Phase 6)* | Attachments never touch the app server's disk; downloads use presigned URLs |
 
@@ -70,7 +70,32 @@ users ──< workspace_memberships >── workspaces >── organizations >�
 Every table uses a UUID primary key (`default=uuid4`, generated app-side) and timezone-aware
 `created_at` / `updated_at` columns via shared mixins in [`app/db/base.py`](backend/app/db/base.py).
 
-## API surface (Phase 1–3)
+## Real-time architecture
+
+Every backend instance subscribes to Redis pub/sub (`project:{id}:events`, pattern-subscribed
+once as `project:*:events`) and relays messages to whichever WebSocket clients happen to be
+connected to *that* instance. A REST call that changes a task publishes to Redis rather than
+pushing to local sockets directly — so a task updated via an API call served by instance A still
+reaches a WebSocket client connected to instance B. Only one instance runs in this project's
+setup, so that fan-out is presently a no-op round trip through Redis rather than something
+observably necessary — but the code path is identical either way, which is the point: horizontal
+scaling readiness without needing a rewrite to add it later.
+
+Presence (who's viewing a project) is tracked in Redis as a per-project hash of
+`user_id -> open-connection-count` (`app/ws/presence.py`), not a local in-process set — a ref
+count because one user can hold multiple tabs/connections open, and a Redis-backed count (not an
+in-memory one) because it needs to stay correct even if those connections land on different
+instances. `GET /api/projects/{project_id}/presence` exposes the same data over REST for clients
+that want a snapshot without opening a socket.
+
+**Known simplification:** the WebSocket handshake passes the JWT access token as a query
+parameter (`?token=...`), not an `Authorization` header — browsers' native WebSocket API can't
+set custom headers on the handshake request. This means a short-lived access token can end up in
+server access logs via the query string. A production system would issue a short-lived, single-use
+WS ticket via an authenticated REST call instead of reusing the access token here. See
+[`docs/PHASE-4.md`](docs/PHASE-4.md) for the four concurrency bugs found building this.
+
+## API surface (Phase 1–4)
 
 ```
 POST   /api/auth/register | login | refresh        GET /api/auth/me
@@ -87,6 +112,8 @@ POST   /api/projects/{project_id}/labels               GET  .../labels
 POST   /api/tasks/{task_id}/comments                    GET  .../comments
 GET    /api/projects/{project_id}/activity?page=&page_size=
 GET    /api/tasks/{task_id}/activity?page=&page_size=
+GET    /api/projects/{project_id}/presence
+WS     /ws/projects/{project_id}?token=<jwt>
 ```
 
 Full interactive docs at `/docs` once the server is running.
@@ -129,7 +156,7 @@ pytest
 | **1** | Foundation — app skeleton, typed settings, async DB layer, org/workspace/membership models, first migration | ✅ **Done** |
 | **2** | Auth (JWT register/login/refresh) + RBAC dependencies + projects, tasks, labels, comments | ✅ **Done** |
 | **3** | Activity log + task filtering, sorting, search, pagination | ✅ **Done** |
-| 4 | Real-time: WebSocket endpoint, Redis pub/sub fan-out, presence tracking | ⏳ Planned |
+| **4** | Real-time: WebSocket endpoint, Redis pub/sub fan-out, presence tracking | ✅ **Done** |
 | 5 | Notifications (in-app + email via Celery) + due-soon reminders | ⏳ Planned |
 | 6 | File attachments on tasks (S3-compatible storage, presigned downloads) | ⏳ Planned |
 | 7 | Frontend — React 19 + TypeScript, boards, real-time client | ⏳ Planned |
