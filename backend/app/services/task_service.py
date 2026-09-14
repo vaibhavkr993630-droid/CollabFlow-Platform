@@ -1,6 +1,7 @@
 import uuid
 from datetime import date
 
+from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.crud import label as label_crud
@@ -9,6 +10,7 @@ from app.crud import task as task_crud
 from app.models.activity import ActivityAction
 from app.models.task import Task, TaskPriority, TaskStatus
 from app.services import activity_service
+from app.ws.events import WSEventType, publish_event
 
 
 class TaskServiceError(Exception):
@@ -23,8 +25,20 @@ async def _validate_assignee(
         raise TaskServiceError("Assignee must be a member of this project")
 
 
+def _task_broadcast_payload(task: Task) -> dict:
+    return {
+        "id": str(task.id),
+        "title": task.title,
+        "status": task.status.value,
+        "priority": task.priority.value,
+        "assignee_id": str(task.assignee_id) if task.assignee_id else None,
+        "position": task.position,
+    }
+
+
 async def create_task(
     db: AsyncSession,
+    redis: Redis,
     *,
     project_id: uuid.UUID,
     title: str,
@@ -66,6 +80,14 @@ async def create_task(
     )
     await db.commit()
     await db.refresh(task)
+
+    await publish_event(
+        redis,
+        project_id=project_id,
+        event_type=WSEventType.TASK_CREATED,
+        data=_task_broadcast_payload(task),
+        actor_id=created_by_id,
+    )
     return task
 
 
@@ -81,7 +103,9 @@ async def _resolve_labels(
     return labels
 
 
-async def update_task(db: AsyncSession, *, task: Task, updates: dict, actor_id: uuid.UUID) -> Task:
+async def update_task(
+    db: AsyncSession, redis: Redis, *, task: Task, updates: dict, actor_id: uuid.UUID
+) -> Task:
     if "assignee_id" in updates and updates["assignee_id"] is not None:
         await _validate_assignee(db, project_id=task.project_id, assignee_id=updates["assignee_id"])
 
@@ -115,17 +139,36 @@ async def update_task(db: AsyncSession, *, task: Task, updates: dict, actor_id: 
 
     await db.commit()
     await db.refresh(task)
+
+    if changes:
+        await publish_event(
+            redis,
+            project_id=task.project_id,
+            event_type=WSEventType.TASK_UPDATED,
+            data={**_task_broadcast_payload(task), "changes": changes},
+            actor_id=actor_id,
+        )
     return task
 
 
-async def delete_task(db: AsyncSession, *, task: Task, actor_id: uuid.UUID) -> None:
+async def delete_task(db: AsyncSession, redis: Redis, *, task: Task, actor_id: uuid.UUID) -> None:
+    task_id, project_id, title = task.id, task.project_id, task.title
+
     await activity_service.log(
         db,
-        project_id=task.project_id,
+        project_id=project_id,
         task_id=None,  # the task row is about to be deleted — don't leave a dangling FK
         actor_id=actor_id,
         action=ActivityAction.TASK_DELETED,
-        summary=f"deleted task '{task.title}'",
+        summary=f"deleted task '{title}'",
     )
     await task_crud.delete(db, task)
     await db.commit()
+
+    await publish_event(
+        redis,
+        project_id=project_id,
+        event_type=WSEventType.TASK_DELETED,
+        data={"id": str(task_id), "title": title},
+        actor_id=actor_id,
+    )

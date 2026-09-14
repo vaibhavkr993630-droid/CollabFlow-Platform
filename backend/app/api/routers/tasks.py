@@ -1,9 +1,11 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user, require_project_role, require_task_project_role
+from app.core.redis import get_redis_client
 from app.crud import task as task_crud
 from app.db.session import get_db
 from app.models.roles import Role
@@ -23,10 +25,12 @@ async def create_task(
     task_in: TaskCreate,
     current_user: User = Depends(require_project_role(Role.MEMBER)),
     db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis_client),
 ) -> Task:
     try:
         return await task_service.create_task(
             db,
+            redis,
             project_id=project_id,
             title=task_in.title,
             description=task_in.description,
@@ -83,11 +87,12 @@ async def update_task(
     task: Task = Depends(require_task_project_role(Role.MEMBER)),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis_client),
 ) -> Task:
     updates = task_in.model_dump(exclude_unset=True)
     try:
         return await task_service.update_task(
-            db, task=task, updates=updates, actor_id=current_user.id
+            db, redis, task=task, updates=updates, actor_id=current_user.id
         )
     except TaskServiceError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
@@ -98,8 +103,9 @@ async def delete_task(
     task: Task = Depends(require_task_project_role(Role.ADMIN)),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis_client),
 ) -> None:
-    await task_service.delete_task(db, task=task, actor_id=current_user.id)
+    await task_service.delete_task(db, redis, task=task, actor_id=current_user.id)
 
 
 @task_router.get("/subtasks", response_model=list[TaskRead])

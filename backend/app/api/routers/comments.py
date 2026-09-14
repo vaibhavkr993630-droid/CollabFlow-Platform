@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Depends, status
+from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user, require_task_project_role
+from app.core.redis import get_redis_client
 from app.crud import comment as comment_crud
 from app.db.session import get_db
 from app.models.comment import Comment
@@ -20,9 +22,10 @@ async def create_comment(
     task: Task = Depends(require_task_project_role(Role.MEMBER)),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis_client),
 ) -> Comment:
     return await comment_service.create_comment(
-        db, task_id=task.id, author_id=current_user.id, body=comment_in.body
+        db, redis, task_id=task.id, author_id=current_user.id, body=comment_in.body
     )
 
 
