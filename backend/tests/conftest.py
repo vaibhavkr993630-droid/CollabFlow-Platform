@@ -1,11 +1,13 @@
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Generator
 
 import pytest
+from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
 from app.core.config import get_settings
+from app.core.redis import close_redis_client
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
@@ -28,6 +30,21 @@ async def _reset_schema() -> AsyncGenerator[None, None]:
     yield
 
 
+@pytest.fixture(autouse=True)
+async def _reset_redis_client() -> AsyncGenerator[None, None]:
+    """
+    get_redis_client() is a process-wide singleton (see app/core/redis.py) — fine
+    in production (one event loop for the process's whole lifetime), but
+    pytest-asyncio hands each test function its own event loop. A redis-py client
+    created under test A's loop breaks with "Event loop is closed" once test B's
+    (different) loop tries to use it. Same root cause NullPool fixes for the DB
+    engine above; the fix here is closing it after every test so the next test
+    creates its own, bound to its own loop.
+    """
+    yield
+    await close_redis_client()
+
+
 @pytest.fixture
 async def db_session() -> AsyncGenerator[AsyncSession, None]:
     async with TestSessionLocal() as session:
@@ -44,4 +61,25 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def ws_client() -> Generator[TestClient, None, None]:
+    """
+    For WebSocket tests only: httpx.AsyncClient has no WebSocket support, so this
+    uses Starlette's synchronous TestClient instead (FastAPI's own recommended way
+    to test WebSocket routes). It runs the ASGI app in a background thread with its
+    own event loop; our async DB engine uses NullPool (see `engine` above), so a
+    connection opened from that thread is never reused across event loops — the
+    same reasoning that made NullPool necessary for the async fixtures.
+    """
+
+    async def _get_test_db() -> AsyncGenerator[AsyncSession, None]:
+        async with TestSessionLocal() as session:
+            yield session
+
+    app.dependency_overrides[get_db] = _get_test_db
+    with TestClient(app) as client:
+        yield client
     app.dependency_overrides.clear()
