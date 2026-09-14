@@ -4,12 +4,14 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import require_project_role, require_workspace_role
+from app.core.redis import get_redis_client
 from app.crud import project as project_crud
 from app.db.session import get_db
 from app.models.project import Project, ProjectMembership
 from app.models.roles import Role
 from app.models.user import User
 from app.schemas.project import (
+    PresenceRead,
     ProjectCreate,
     ProjectMemberInvite,
     ProjectMemberRead,
@@ -17,6 +19,7 @@ from app.schemas.project import (
 )
 from app.services import project_service
 from app.services.project_service import ProjectServiceError
+from app.ws import presence
 
 router = APIRouter(prefix="/api/workspaces/{workspace_id}/projects", tags=["projects"])
 member_router = APIRouter(prefix="/api/projects/{project_id}", tags=["projects"])
@@ -78,3 +81,12 @@ async def invite_project_member(
         )
     except ProjectServiceError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@member_router.get("/presence", response_model=PresenceRead)
+async def get_project_presence(
+    project_id: uuid.UUID,
+    _: User = Depends(require_project_role(Role.MEMBER)),
+) -> PresenceRead:
+    online_ids = await presence.online_user_ids(get_redis_client(), project_id=project_id)
+    return PresenceRead(online_user_ids=online_ids)

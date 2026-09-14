@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import Depends, HTTPException, Path, status
+from fastapi import Depends, HTTPException, Path, Query, WebSocketException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -35,6 +35,45 @@ async def get_current_user(
     if user is None or not user.is_active:
         raise credentials_error
     return user
+
+
+def require_ws_project_role(min_role: Role):
+    """
+    WebSocket equivalent of require_project_role, resolved as a normal FastAPI
+    Depends() rather than called by hand: raising WebSocketException from a
+    dependency makes FastAPI close the socket with that code *before* accepting
+    the connection, so this plugs into Depends(get_db) like every HTTP dependency
+    instead of needing a hand-rolled DB session that tests can't override.
+
+    Token arrives as a query parameter (`?token=...`), not an Authorization header
+    — browsers' native WebSocket API cannot set custom headers on the handshake
+    request. Real tradeoff: a short-lived access token ends up in server access
+    logs via the query string. Documented in PROGRESS.md under Known
+    Simplifications; a production system would issue a short-lived, single-use WS
+    ticket via an authenticated REST call instead of reusing the access token here.
+    """
+
+    async def _check(
+        project_id: uuid.UUID = Path(...),
+        token: str = Query(...),
+        db: AsyncSession = Depends(get_db),
+    ) -> User:
+        try:
+            user_id = decode_token(token, TokenType.ACCESS)
+        except InvalidTokenError as exc:
+            raise WebSocketException(code=4401, reason="Invalid or expired token") from exc
+
+        user = await user_crud.get_by_id(db, user_id)
+        if user is None or not user.is_active:
+            raise WebSocketException(code=4401, reason="Invalid or expired token")
+
+        membership = await project_crud.get_membership(db, project_id=project_id, user_id=user.id)
+        if membership is None or ROLE_RANK[membership.role] < ROLE_RANK[min_role]:
+            raise WebSocketException(code=4403, reason="Not a member of this project")
+
+        return user
+
+    return _check
 
 
 def require_workspace_role(min_role: Role):

@@ -31,3 +31,7 @@ class ProjectMemberRead(BaseModel):
     id: uuid.UUID
     user_id: uuid.UUID
     role: Role
+
+
+class PresenceRead(BaseModel):
+    online_user_ids: list[str]
