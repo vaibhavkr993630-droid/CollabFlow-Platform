@@ -37,6 +37,28 @@ async def get_current_user(
     return user
 
 
+async def get_current_user_ws(
+    token: str = Query(...),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    """
+    WebSocket equivalent of get_current_user, for routes that only need "is this a
+    valid, active user" — no project/workspace membership check. See
+    require_ws_project_role's docstring for why this raises WebSocketException
+    instead of the HTTPException get_current_user uses.
+    """
+    try:
+        user_id = decode_token(token, TokenType.ACCESS)
+    except InvalidTokenError as exc:
+        raise WebSocketException(code=4401, reason="Invalid or expired token") from exc
+
+    user = await user_crud.get_by_id(db, user_id)
+    if user is None or not user.is_active:
+        raise WebSocketException(code=4401, reason="Invalid or expired token")
+
+    return user
+
+
 def require_ws_project_role(min_role: Role):
     """
     WebSocket equivalent of require_project_role, resolved as a normal FastAPI

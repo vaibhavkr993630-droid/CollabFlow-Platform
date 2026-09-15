@@ -3,15 +3,17 @@ import uuid
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from redis.asyncio import Redis
 
-from app.core.deps import require_ws_project_role
+from app.core.deps import get_current_user_ws, require_ws_project_role
 from app.core.redis import get_redis_client
 from app.models.roles import Role
 from app.models.user import User
 from app.ws import presence
 from app.ws.connection_manager import connection_manager
 from app.ws.events import WSEventType, publish_event
+from app.ws.notification_manager import notification_manager
 
 router = APIRouter(tags=["websocket"])
+notifications_router = APIRouter(tags=["websocket"])
 
 
 @router.websocket("/ws/projects/{project_id}")
@@ -68,3 +70,24 @@ async def project_websocket(
                 data={"user_id": str(user.id)},
                 actor_id=user.id,
             )
+
+
+@notifications_router.websocket("/ws/notifications")
+async def notifications_websocket(
+    websocket: WebSocket, user: User = Depends(get_current_user_ws)
+) -> None:
+    """
+    Delivers in-app notifications (mentions, task assignments, workspace/project
+    invites) live. Deliberately separate from /ws/projects/{id}: notifications
+    aren't scoped to any one project room, and a user should be notified even for
+    a project they don't currently have that room open for.
+    """
+    await websocket.accept()
+    notification_manager.connect(user.id, websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        pass
+    finally:
+        notification_manager.disconnect(user.id, websocket)

@@ -20,7 +20,9 @@ from app.api.routers import (
 from app.core.config import get_settings
 from app.core.redis import close_redis_client, get_redis_client
 from app.ws.connection_manager import connection_manager
-from app.ws.redis_listener import run_redis_listener
+from app.ws.events import project_id_from_channel, user_id_from_notification_channel
+from app.ws.notification_manager import notification_manager
+from app.ws.redis_listener import run_pattern_listener
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -29,15 +31,32 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
     redis = get_redis_client()
-    listener_task = asyncio.create_task(run_redis_listener(redis, connection_manager))
+    project_listener = asyncio.create_task(
+        run_pattern_listener(
+            redis,
+            pattern="project:*:events",
+            extract_id=project_id_from_channel,
+            deliver=connection_manager.send_to_project,
+        )
+    )
+    notification_listener = asyncio.create_task(
+        run_pattern_listener(
+            redis,
+            pattern="user:*:notifications",
+            extract_id=user_id_from_notification_channel,
+            deliver=notification_manager.send_to_user,
+        )
+    )
 
     yield
 
-    listener_task.cancel()
-    try:
-        await listener_task
-    except asyncio.CancelledError:
-        pass
+    for task in (project_listener, notification_listener):
+        task.cancel()
+    for task in (project_listener, notification_listener):
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
     await close_redis_client()
 
 
@@ -64,6 +83,7 @@ app.include_router(comments.router)
 app.include_router(activity.project_router)
 app.include_router(activity.task_router)
 app.include_router(ws.router)
+app.include_router(ws.notifications_router)
 
 
 @app.get("/health")
