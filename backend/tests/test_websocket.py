@@ -128,3 +128,38 @@ def test_presence_endpoint_reflects_connected_user(ws_client: TestClient):
     # with the standalone `websockets` client (see PROGRESS.md) that presence.leave
     # and the resulting PRESENCE_LEFT broadcast fire correctly and promptly on an
     # actual disconnect.
+
+
+def test_notifications_websocket_receives_live_notification(ws_client: TestClient):
+    owner_token, _ = _register_and_login(ws_client, "wsnotifyowner@example.com", "Owner")
+    member_token, member_id = _register_and_login(ws_client, "wsnotifymember@example.com", "Member")
+
+    org = ws_client.post(
+        "/api/organizations", json={"name": "WS Notify Org"}, headers=_headers(owner_token)
+    ).json()
+    ws_resp = ws_client.post(
+        f"/api/organizations/{org['id']}/workspaces",
+        json={"name": "Eng"},
+        headers=_headers(owner_token),
+    ).json()
+    project = ws_client.post(
+        f"/api/workspaces/{ws_resp['id']}/projects",
+        json={"name": "WS Notify Project"},
+        headers=_headers(owner_token),
+    ).json()
+    ws_client.post(
+        f"/api/projects/{project['id']}/members",
+        json={"email": "wsnotifymember@example.com", "role": "member"},
+        headers=_headers(owner_token),
+    )
+
+    with ws_client.websocket_connect(f"/ws/notifications?token={member_token}") as ws:
+        ws_client.post(
+            f"/api/projects/{project['id']}/tasks",
+            json={"title": "Assigned via WS", "assignee_id": member_id},
+            headers=_headers(owner_token),
+        )
+
+        event = ws.receive_json()
+        assert event["type"] == "notification"
+        assert event["data"]["type"] == "task_assigned"
