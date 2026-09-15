@@ -274,5 +274,85 @@ pytest                     # + WebSocket connect/auth/broadcast/presence
 
 ### Next
 
-**Phase 5 — Notifications:** in-app notifications over their own WebSocket, persisted rows,
-Celery + Redis for email delivery, and a daily due-soon reminder job.
+Phase 4 is done. Next: Phase 5 (notifications, Celery, email, reminders).
+
+---
+
+## Phase 5 — Notifications & Background Jobs ✅
+
+**Goal:** every event a user actually cares about — being mentioned, assigned, invited, or
+having a task due tomorrow — reaches them two ways: live in-app and via email, without the
+request that triggered it waiting on either.
+
+### Delivered
+
+- **`Notification`** model — `user_id`, `type` (mention / task_assigned / workspace_invite /
+  project_invite / task_due_soon), title/body, optional `project_id`/`task_id` (both
+  `ON DELETE SET NULL`, same "history outlives the referenced entity" reasoning as Phase 3's
+  `ActivityLog`), `read_at` nullable (unread = `NULL`, no separate boolean to drift out of sync).
+- **`notification_service.create_and_dispatch`** — the single choke point every trigger calls
+  through: persists + commits **as its own unit of work**, broadcasts live over
+  `/ws/notifications`, and always queues a Celery email task regardless of whether the recipient
+  is currently connected.
+- **Real-time delivery generalized, not duplicated** — Phase 4's `run_redis_listener` became a
+  generic `run_pattern_listener(pattern, extract_id, deliver)`; `main.py`'s lifespan now runs two
+  instances of it (`project:*:events` → `ConnectionManager`, `user:*:notifications` →
+  `NotificationConnectionManager`) instead of two different pieces of listener code.
+- **`WS /ws/notifications`** — any authenticated user, no project membership check (deliberately
+  separate from `/ws/projects/{id}`: a user should be notified even for a project they don't
+  have open). REST: `GET /api/notifications` (paginated), `.../unread-count`,
+  `POST .../{id}/read`, `POST .../read-all`.
+- **Triggers wired into existing services**, not new endpoints: task assignment (create +
+  reassignment, not self-assignment), workspace/project invite, and `@mention` parsing in
+  comments (`app/core/mentions.py`, resolved by email — only notifies if the mentioned email
+  belongs to an actual project member; a non-member mention is a silent no-op).
+- **Celery** (`app/workers/celery_app.py`, Redis as broker+backend) + `send_notification_email`
+  (blocking `smtplib`, fine since it only runs on a worker thread) + Celery Beat's
+  `send_due_soon_reminders`, daily, matching tasks due **exactly tomorrow**.
+- **MailDev** in `docker-compose.yml` for real local SMTP delivery without real credentials —
+  viewable at `http://localhost:1080`.
+- **Closes Phase 2's deferred mention-parsing item** — comments got `@mention` syntax now that
+  there's a notification system to actually deliver one to.
+
+### Decisions
+
+- **Due-soon reminder matches `due_date == tomorrow` exactly, not "due within N days."** The job
+  runs once daily; an exact match fires once per task, the day before it's due. A range match
+  would re-notify the same still-open task every day the job runs until it's done — more
+  thorough-looking, but actually a spam generator. Tradeoff, stated honestly: a task whose due
+  date passes during job downtime never gets reminded.
+- **`create_and_dispatch` commits on its own, not inside the caller's transaction** — a single
+  comment can `@mention` several members, so one `create_comment` call may invoke it multiple
+  times; each notification needs to succeed or fail independently, not roll back the others (or
+  the comment itself) over one bad recipient lookup. Same reasoning as Phase 4's
+  broadcast-after-commit, one layer further.
+- **A genuine test-writing lesson, not a code bug:** early notification tests asserted the wrong
+  count after an invite-then-assign flow, because inviting a user *also* creates a
+  `project_invite` notification for that same recipient — both fire correctly. The app was right;
+  the test assertions were checked against actual behavior before being corrected, not just
+  adjusted until green.
+
+### Bug found and fixed
+
+**MailDev's `:latest` tag pulled a release candidate (3.0.0-rc.3) with a different, API-only
+routing scheme** — the web UI and `/email` endpoint both 404'd even though the SMTP server and
+container were genuinely healthy (confirmed via container logs before assuming misconfiguration).
+Pinning to `2.1.0`, a known stable release, fixed it immediately. `:latest` on a fast-moving
+dev-tool image is a real risk, not a hygiene nitpick.
+
+### Verify
+
+```bash
+docker compose up -d postgres redis
+cd backend && pip install -e ".[dev]" && cp .env.example .env
+alembic upgrade head        # now at c18c809922b5
+uvicorn app.main:app --reload &
+celery -A app.workers.celery_app worker --loglevel=info &
+celery -A app.workers.celery_app beat --loglevel=info &
+pytest
+```
+
+### Next
+
+**Phase 6 — Files:** MinIO integration, attachment upload/validation on tasks, file metadata in
+the DB. MinIO has been in `docker-compose.yml` since Phase 1 but never actually used until now.

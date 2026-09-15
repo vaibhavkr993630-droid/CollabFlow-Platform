@@ -7,7 +7,7 @@
 
 <p align="center">
   <img alt="Status" src="https://img.shields.io/badge/status-in%20development-blue">
-  <img alt="Phase" src="https://img.shields.io/badge/phase-4%20of%209%20%E2%80%94%20real--time-brightgreen">
+  <img alt="Phase" src="https://img.shields.io/badge/phase-5%20of%209%20%E2%80%94%20notifications-brightgreen">
   <img alt="Backend" src="https://img.shields.io/badge/backend-FastAPI%20%2B%20async%20SQLAlchemy-009688">
   <img alt="Python" src="https://img.shields.io/badge/python-3.12%2B-3776AB">
   <img alt="License" src="https://img.shields.io/badge/license-MIT-black">
@@ -35,7 +35,7 @@ reviewable slice of functionality with its own migration, tests, and progress no
 | Database | **PostgreSQL 16** | Native `uuid`, enum types, and constraint support the domain leans on |
 | Migrations | **Alembic** (async env) | Every schema change is a versioned, reviewable script — no auto-sync in any environment |
 | Real-time | **WebSockets + Redis pub/sub** | Horizontal-scale-ready fan-out: any instance can deliver an event to any connected client |
-| Background jobs | **Celery + Redis** *(Phase 5)* | Email notifications and scheduled reminders off the request path |
+| Background jobs | **Celery + Redis** | Email notifications and scheduled reminders off the request path |
 | File storage | **S3-compatible object storage / MinIO** *(Phase 6)* | Attachments never touch the app server's disk; downloads use presigned URLs |
 
 ## Data model (Phase 1 + 2)
@@ -114,17 +114,35 @@ GET    /api/projects/{project_id}/activity?page=&page_size=
 GET    /api/tasks/{task_id}/activity?page=&page_size=
 GET    /api/projects/{project_id}/presence
 WS     /ws/projects/{project_id}?token=<jwt>
+GET    /api/notifications?page=&page_size=       GET  .../unread-count
+POST   /api/notifications/{id}/read              POST .../read-all
+WS     /ws/notifications?token=<jwt>
 ```
 
 Full interactive docs at `/docs` once the server is running.
 
+## Notifications & background jobs
+
+In-app notifications (mentions, task assignments, workspace/project invites, due-soon reminders)
+are delivered live over `/ws/notifications` and persisted to the `notifications` table. Each one
+also queues a Celery task that sends an email — in local dev this goes to a MailDev container, not
+a real inbox, so nothing needs real SMTP credentials to test the full flow. View sent mail at
+`http://localhost:1080`. Celery Beat runs `send_due_soon_reminders` once daily (see
+`app/workers/celery_app.py`) for tasks due the next day.
+
+`@mentions` in comments use the mentioned user's **email** (e.g. `@alice@example.com`) — there's
+no separate username field on `User`, and email is the only identifier a mention can unambiguously
+resolve to one account. A mention only notifies if that email belongs to an actual member of the
+task's project; mentioning a non-member's email is a silent no-op (not an error) — see
+`app/services/comment_service.py`.
+
 ## Quickstart
 
-**Requirements:** Python 3.12+, Docker (for Postgres & Redis), or your own local instances.
+**Requirements:** Python 3.12+, Docker (for Postgres, Redis, MailDev), or your own local instances.
 
 ```bash
 # 1. Infrastructure
-docker compose up -d postgres redis
+docker compose up -d postgres redis maildev
 
 # 2. Backend
 cd backend
@@ -142,6 +160,16 @@ uvicorn app.main:app --reload
 - API + interactive docs: <http://localhost:8000/docs>
 - Health check: <http://localhost:8000/health> — returns `{"status": "ok"}`
 
+### Running the background worker
+
+Needed for email sending and the due-soon reminder job — the API queues Celery tasks regardless
+of whether a worker is running, so nothing breaks without one, but nothing gets delivered either.
+
+```bash
+celery -A app.workers.celery_app worker --loglevel=info   # processes queued tasks
+celery -A app.workers.celery_app beat --loglevel=info      # schedules the daily reminder job
+```
+
 ### Tests
 
 ```bash
@@ -157,7 +185,7 @@ pytest
 | **2** | Auth (JWT register/login/refresh) + RBAC dependencies + projects, tasks, labels, comments | ✅ **Done** |
 | **3** | Activity log + task filtering, sorting, search, pagination | ✅ **Done** |
 | **4** | Real-time: WebSocket endpoint, Redis pub/sub fan-out, presence tracking | ✅ **Done** |
-| 5 | Notifications (in-app + email via Celery) + due-soon reminders | ⏳ Planned |
+| **5** | Notifications (in-app + email via Celery) + due-soon reminders | ✅ **Done** |
 | 6 | File attachments on tasks (S3-compatible storage, presigned downloads) | ⏳ Planned |
 | 7 | Frontend — React 19 + TypeScript, boards, real-time client | ⏳ Planned |
 | 8 | Hardening — Docker Compose stack, structured logging, CI, health checks | ⏳ Planned |
