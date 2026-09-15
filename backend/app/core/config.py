@@ -23,8 +23,13 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 15
     refresh_token_expire_days: int = 7
 
-    # Redis (Phase 4+)
+    # Redis
     redis_url: str = "redis://localhost:6379/0"
+
+    # Email (Celery worker; MailDev in local dev — see docker-compose.yml)
+    smtp_host: str = "localhost"
+    smtp_port: int = 1025
+    smtp_from: str = "noreply@collabflow.local"
 
     # CORS
     cors_origins: list[str] = ["http://localhost:5173"]

@@ -15,7 +15,8 @@ dependencies = [
     "bcrypt<4.1",  # passlib 1.7.4's backend self-test breaks on bcrypt>=4.1's strict 72-byte limit
     "python-jose[cryptography]>=3.3",
     "python-multipart>=0.0.12",  # OAuth2PasswordBearer's tokenUrl form / future file uploads
-    "redis>=5.2",                # settings surface now; consumed for pub/sub in Phase 4
+    "redis>=5.2",                # pub/sub (Phase 4) and now the Celery broker/backend
+    "celery>=5.4",                # background email delivery + the daily due-soon reminder
 ]
 
 [project.optional-dependencies]

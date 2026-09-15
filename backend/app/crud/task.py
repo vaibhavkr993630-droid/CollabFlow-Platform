@@ -113,3 +113,21 @@ async def list_subtasks(db: AsyncSession, *, parent_task_id: uuid.UUID) -> list[
 async def delete(db: AsyncSession, task: Task) -> None:
     await db.delete(task)
     await db.flush()
+
+
+async def list_due_on(db: AsyncSession, *, due_date: date) -> list[Task]:
+    """
+    Assigned, not-done tasks due on exactly `due_date` — feeds the Celery Beat
+    due-soon reminder job (called with tomorrow's date). An exact-date match, not
+    "due within N days": the job runs once daily, so a task due tomorrow matches
+    on exactly one run. Matching a range instead would re-notify the same
+    still-overdue task every single day until it's completed.
+    """
+    result = await db.execute(
+        select(Task).where(
+            Task.due_date == due_date,
+            Task.assignee_id.is_not(None),
+            Task.status != TaskStatus.DONE,
+        )
+    )
+    return list(result.scalars().all())
