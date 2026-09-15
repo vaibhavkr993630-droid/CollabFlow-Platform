@@ -1,13 +1,16 @@
 import uuid
 
+from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.slugs import slugify
 from app.crud import organization as org_crud
 from app.crud import user as user_crud
 from app.crud import workspace as workspace_crud
+from app.models.notification import NotificationType
 from app.models.roles import Role
 from app.models.workspace import Workspace, WorkspaceMembership
+from app.services import notification_service
 
 
 class WorkspaceServiceError(Exception):
@@ -33,7 +36,7 @@ async def create_workspace(
 
 
 async def invite_member(
-    db: AsyncSession, *, workspace_id: uuid.UUID, email: str, role: Role
+    db: AsyncSession, redis: Redis, *, workspace_id: uuid.UUID, email: str, role: Role
 ) -> WorkspaceMembership:
     user = await user_crud.get_by_email(db, email)
     if user is None:
@@ -48,4 +51,14 @@ async def invite_member(
     )
     await db.commit()
     await db.refresh(membership)
+
+    workspace = await workspace_crud.get_by_id(db, workspace_id)
+    await notification_service.create_and_dispatch(
+        db,
+        redis,
+        user_id=user.id,
+        type=NotificationType.WORKSPACE_INVITE,
+        title=f"You were added to workspace '{workspace.name}'",
+        body=f"You were added to workspace '{workspace.name}' as {role.value}.",
+    )
     return membership

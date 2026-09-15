@@ -1,5 +1,6 @@
 import uuid
 
+from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.slugs import slugify
@@ -7,9 +8,10 @@ from app.crud import project as project_crud
 from app.crud import user as user_crud
 from app.crud import workspace as workspace_crud
 from app.models.activity import ActivityAction
+from app.models.notification import NotificationType
 from app.models.project import Project, ProjectMembership
 from app.models.roles import Role
-from app.services import activity_service
+from app.services import activity_service, notification_service
 
 
 class ProjectServiceError(Exception):
@@ -45,7 +47,13 @@ async def create_project(
 
 
 async def invite_member(
-    db: AsyncSession, *, project_id: uuid.UUID, email: str, role: Role, actor_id: uuid.UUID
+    db: AsyncSession,
+    redis: Redis,
+    *,
+    project_id: uuid.UUID,
+    email: str,
+    role: Role,
+    actor_id: uuid.UUID,
 ) -> ProjectMembership:
     user = await user_crud.get_by_email(db, email)
     if user is None:
@@ -67,4 +75,15 @@ async def invite_member(
     )
     await db.commit()
     await db.refresh(membership)
+
+    project = await project_crud.get_by_id(db, project_id)
+    await notification_service.create_and_dispatch(
+        db,
+        redis,
+        user_id=user.id,
+        type=NotificationType.PROJECT_INVITE,
+        title=f"You were added to project '{project.name}'",
+        body=f"You were added to project '{project.name}' as {role.value}.",
+        project_id=project_id,
+    )
     return membership

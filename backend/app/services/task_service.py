@@ -8,8 +8,9 @@ from app.crud import label as label_crud
 from app.crud import project as project_crud
 from app.crud import task as task_crud
 from app.models.activity import ActivityAction
+from app.models.notification import NotificationType
 from app.models.task import Task, TaskPriority, TaskStatus
-from app.services import activity_service
+from app.services import activity_service, notification_service
 from app.ws.events import WSEventType, publish_event
 
 
@@ -88,6 +89,18 @@ async def create_task(
         data=_task_broadcast_payload(task),
         actor_id=created_by_id,
     )
+
+    if assignee_id is not None and assignee_id != created_by_id:
+        await notification_service.create_and_dispatch(
+            db,
+            redis,
+            user_id=assignee_id,
+            type=NotificationType.TASK_ASSIGNED,
+            title=f"You were assigned '{title}'",
+            body=f"You were assigned to task '{title}'.",
+            project_id=project_id,
+            task_id=task.id,
+        )
     return task
 
 
@@ -147,6 +160,18 @@ async def update_task(
             event_type=WSEventType.TASK_UPDATED,
             data={**_task_broadcast_payload(task), "changes": changes},
             actor_id=actor_id,
+        )
+
+    if "assignee_id" in changes and task.assignee_id is not None and task.assignee_id != actor_id:
+        await notification_service.create_and_dispatch(
+            db,
+            redis,
+            user_id=task.assignee_id,
+            type=NotificationType.TASK_ASSIGNED,
+            title=f"You were assigned '{task.title}'",
+            body=f"You were assigned to task '{task.title}'.",
+            project_id=task.project_id,
+            task_id=task.id,
         )
     return task
 

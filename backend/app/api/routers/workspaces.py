@@ -1,9 +1,11 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user, require_workspace_role
+from app.core.redis import get_redis_client
 from app.crud import workspace as workspace_crud
 from app.db.session import get_db
 from app.models.roles import Role
@@ -57,10 +59,11 @@ async def invite_workspace_member(
     invite_in: WorkspaceMemberInvite,
     _: User = Depends(require_workspace_role(Role.ADMIN)),
     db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis_client),
 ) -> WorkspaceMembership:
     try:
         return await workspace_service.invite_member(
-            db, workspace_id=workspace_id, email=invite_in.email, role=invite_in.role
+            db, redis, workspace_id=workspace_id, email=invite_in.email, role=invite_in.role
         )
     except WorkspaceServiceError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc

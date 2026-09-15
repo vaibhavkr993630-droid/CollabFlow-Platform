@@ -1,6 +1,7 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import require_project_role, require_workspace_role
@@ -70,10 +71,12 @@ async def invite_project_member(
     invite_in: ProjectMemberInvite,
     current_user: User = Depends(require_project_role(Role.ADMIN)),
     db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis_client),
 ) -> ProjectMembership:
     try:
         return await project_service.invite_member(
             db,
+            redis,
             project_id=project_id,
             email=invite_in.email,
             role=invite_in.role,
