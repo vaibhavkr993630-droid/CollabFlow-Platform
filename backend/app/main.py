@@ -11,6 +11,7 @@ from app.api.routers import (
     auth,
     comments,
     labels,
+    notifications,
     organizations,
     projects,
     tasks,
@@ -82,6 +83,7 @@ app.include_router(labels.router)
 app.include_router(comments.router)
 app.include_router(activity.project_router)
 app.include_router(activity.task_router)
+app.include_router(notifications.router)
 app.include_router(ws.router)
 app.include_router(ws.notifications_router)
 
