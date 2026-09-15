@@ -1,6 +1,7 @@
 from app.models.activity import ActivityAction, ActivityLog
 from app.models.comment import Comment
 from app.models.label import Label, task_labels
+from app.models.notification import Notification, NotificationType
 from app.models.organization import Organization
 from app.models.project import Project, ProjectMembership
 from app.models.roles import Role
@@ -13,6 +14,8 @@ __all__ = [
     "ActivityLog",
     "Comment",
     "Label",
+    "Notification",
+    "NotificationType",
     "Organization",
     "Project",
     "ProjectMembership",
