@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routers import (
     activity,
+    attachments,
     auth,
     comments,
     labels,
@@ -20,6 +21,7 @@ from app.api.routers import (
 )
 from app.core.config import get_settings
 from app.core.redis import close_redis_client, get_redis_client
+from app.core.storage import ensure_bucket_exists
 from app.ws.connection_manager import connection_manager
 from app.ws.events import project_id_from_channel, user_id_from_notification_channel
 from app.ws.notification_manager import notification_manager
@@ -31,6 +33,7 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
+    ensure_bucket_exists()
     redis = get_redis_client()
     project_listener = asyncio.create_task(
         run_pattern_listener(
@@ -84,6 +87,7 @@ app.include_router(comments.router)
 app.include_router(activity.project_router)
 app.include_router(activity.task_router)
 app.include_router(notifications.router)
+app.include_router(attachments.router)
 app.include_router(ws.router)
 app.include_router(ws.notifications_router)
 
