@@ -18,6 +18,8 @@ class ActivityAction(StrEnum):
     TASK_DELETED = "task_deleted"
     COMMENT_ADDED = "comment_added"
     LABEL_CREATED = "label_created"
+    ATTACHMENT_ADDED = "attachment_added"
+    ATTACHMENT_REMOVED = "attachment_removed"
 
 
 def _activity_action_column() -> SAEnum:

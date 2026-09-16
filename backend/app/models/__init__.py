@@ -1,4 +1,5 @@
 from app.models.activity import ActivityAction, ActivityLog
+from app.models.attachment import Attachment
 from app.models.comment import Comment
 from app.models.label import Label, task_labels
 from app.models.notification import Notification, NotificationType
@@ -12,6 +13,7 @@ from app.models.workspace import Workspace, WorkspaceMembership
 __all__ = [
     "ActivityAction",
     "ActivityLog",
+    "Attachment",
     "Comment",
     "Label",
     "Notification",

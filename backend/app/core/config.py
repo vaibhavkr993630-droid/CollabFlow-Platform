@@ -31,6 +31,13 @@ class Settings(BaseSettings):
     smtp_port: int = 1025
     smtp_from: str = "noreply@collabflow.local"
 
+    # File storage (MinIO locally, any S3-compatible endpoint in production)
+    s3_endpoint_url: str = "http://localhost:9000"
+    s3_access_key: str = "collabflow"
+    s3_secret_key: str = "collabflow123"
+    s3_bucket: str = "collabflow-attachments"
+    max_attachment_size_mb: int = 10
+
     # CORS
     cors_origins: list[str] = ["http://localhost:5173"]
 

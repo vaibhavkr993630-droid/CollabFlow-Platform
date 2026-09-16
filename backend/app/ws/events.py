@@ -16,6 +16,8 @@ class WSEventType(StrEnum):
     TASK_UPDATED = "task_updated"
     TASK_DELETED = "task_deleted"
     COMMENT_CREATED = "comment_created"
+    ATTACHMENT_ADDED = "attachment_added"
+    ATTACHMENT_REMOVED = "attachment_removed"
     PRESENCE_JOINED = "presence_joined"
     PRESENCE_LEFT = "presence_left"
     PRESENCE_SNAPSHOT = "presence_snapshot"
