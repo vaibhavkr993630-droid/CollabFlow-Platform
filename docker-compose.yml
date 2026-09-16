@@ -20,6 +20,12 @@ services:
     ports:
       - "6379:6379"
 
+  maildev:
+    image: maildev/maildev:2.1.0
+    ports:
+      - "1080:1080" # web UI — view sent mail at http://localhost:1080
+      - "1025:1025" # SMTP — no credentials needed, catches everything
+
   minio:
     image: minio/minio:latest
     command: server /data --console-address ":9001"
