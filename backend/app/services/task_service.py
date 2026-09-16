@@ -4,6 +4,8 @@ from datetime import date
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.storage import delete_object
+from app.crud import attachment as attachment_crud
 from app.crud import label as label_crud
 from app.crud import project as project_crud
 from app.crud import task as task_crud
@@ -178,6 +180,14 @@ async def update_task(
 
 async def delete_task(db: AsyncSession, redis: Redis, *, task: Task, actor_id: uuid.UUID) -> None:
     task_id, project_id, title = task.id, task.project_id, task.title
+
+    # The attachments table FK is ON DELETE CASCADE, so their DB rows disappear
+    # automatically with the task — but that cascade only removes metadata rows,
+    # not the actual objects sitting in MinIO. Those need deleting by hand first,
+    # while the attachment records (and their storage_keys) still exist to read.
+    attachments = await attachment_crud.list_by_task(db, task_id=task_id)
+    for attachment in attachments:
+        delete_object(key=attachment.storage_key)
 
     await activity_service.log(
         db,
