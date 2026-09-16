@@ -354,5 +354,88 @@ pytest
 
 ### Next
 
-**Phase 6 — Files:** MinIO integration, attachment upload/validation on tasks, file metadata in
-the DB. MinIO has been in `docker-compose.yml` since Phase 1 but never actually used until now.
+Phase 5 is done. Next: Phase 6 (MinIO integration, attachment upload/validation on tasks). MinIO
+has been in `docker-compose.yml` since Phase 1 but never actually used until now.
+
+---
+
+## Phase 6 — Files ✅
+
+**Goal:** tasks can carry file attachments, stored in an S3-compatible bucket rather than on the
+app server's own disk — with the API server never proxying file bytes on download.
+
+### Delivered
+
+- **`Attachment`** model — `task_id` (`ON DELETE CASCADE`, unlike `ActivityLog`/`Notification`'s
+  `SET NULL`: an attachment has no meaning independent of its task, it's the actual file, not a
+  record *about* something), `uploaded_by_id`, `filename`, `content_type`, `size_bytes`,
+  `storage_key` (unique object key in the bucket).
+- **`app/core/storage.py`** — boto3 S3 client wrapper (singleton, same pattern as
+  `get_redis_client`), targeting MinIO locally. Bucket auto-created, idempotently, on every app
+  startup via `ensure_bucket_exists()`. `build_storage_key` strips path components from the
+  client-supplied filename and prefixes with a fresh UUID — closes off a crafted filename
+  escaping the task's key prefix, and makes two same-named uploads collision-proof.
+- **Endpoints** — upload (multipart, Member+), list (Member+), download (returns a **presigned
+  URL**, not a proxied stream — the client downloads directly from MinIO), delete (Admin+,
+  matching task deletion's existing restriction).
+- **Validation**: empty files and anything over `MAX_ATTACHMENT_SIZE_MB` (default 10MB) rejected
+  with 400. Deliberately no content-type allow/deny-list — see Known Simplifications.
+- **Task deletion cleans up storage**, not just DB rows: the FK cascade handles the metadata
+  automatically, but MinIO doesn't know about that cascade, so `task_service.delete_task` fetches
+  and deletes each attachment's object *before* the task row (and its cascading attachment rows)
+  are gone — the storage keys have to still exist to read at that point.
+- **Activity log and WebSocket both extended, not re-architected** — `attachment_added` /
+  `attachment_removed` join the existing `ActivityAction`/`WSEventType` enums, following exactly
+  the Phase 3/4 patterns rather than inventing new machinery for a new entity type.
+- **MinIO exercised for the first time** — it's been in `docker-compose.yml` since Phase 1, unused
+  until now (same "declared ahead, used when its phase arrives" pattern as MailDev in Phase 5).
+
+### Decisions
+
+- **Delete is Admin+ only, not "uploader or Admin+."** Every other destructive action in this app
+  (task delete, member removal) is role-gated, not ownership-gated — there's no precedent
+  anywhere else for "you can delete your own X." Adding one just for attachments would be an
+  inconsistent, one-off RBAC shape for a marginal UX gain.
+- **Asymmetric ordering, deliberately, not by accident:** upload deletes-would-be-needed-never
+  because storage happens *before* the DB row (if the S3 write fails, there's nothing to roll
+  back — a row written first would point at a file that doesn't exist). Delete does the opposite
+  — DB row first, storage object after — because the metadata row is what a user perceives as
+  "gone"; if MinIO is briefly unreachable, the delete request still succeeds instead of failing on
+  an infrastructure hiccup, at the cost of a possible orphaned bucket object if the second step
+  never runs. A stated tradeoff, not an oversight.
+
+### Known simplifications
+
+- No content-type allow/deny-list — any file type is accepted, subject only to the size limit.
+  MinIO never executes stored objects, so this isn't a code-execution risk the way
+  serving uploads back through the app server would be; the real gap is not blocking obviously
+  wrong types (`.exe`) at the API layer for UX reasons.
+- Presigned URLs default to a fixed 5-minute expiry, not configurable per request.
+
+### Bug found and fixed
+
+**boto3 hung indefinitely (30s+) on every S3 call, with zero error output** — `ensure_bucket_exists()`,
+uploads, all of it. Root cause: no `region_name` was passed to `boto3.client()`, so boto3 tried
+resolving one via the EC2 instance metadata service (`169.254.169.254`) before giving up — a
+lookup that *hangs* rather than fails fast in any non-EC2 environment, i.e. everywhere this
+project runs. Diagnosed by isolating a plain three-line script outside pytest/the app entirely
+after a full test run timed out with no useful output; `curl` to MinIO's own health endpoint
+succeeded throughout, which is what pointed at boto3's client construction rather than MinIO
+itself as the actual problem. Fixed with an explicit, arbitrary (MinIO ignores it)
+`region_name="us-east-1"`. Worth remembering generally: **if boto3 hangs rather than errors,
+suspect region auto-detection before anything else.**
+
+### Verify
+
+```bash
+docker compose up -d postgres redis minio
+cd backend && pip install -e ".[dev]" && cp .env.example .env
+alembic upgrade head        # now at f17665be6383
+uvicorn app.main:app --reload &
+pytest
+```
+
+### Next
+
+**Phase 7 — Frontend:** React 19 + TypeScript, boards, the real-time WebSocket client.
+Backend feature work per the original brief's phase list is now complete.

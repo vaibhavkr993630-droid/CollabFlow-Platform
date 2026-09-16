@@ -7,7 +7,7 @@
 
 <p align="center">
   <img alt="Status" src="https://img.shields.io/badge/status-in%20development-blue">
-  <img alt="Phase" src="https://img.shields.io/badge/phase-5%20of%209%20%E2%80%94%20notifications-brightgreen">
+  <img alt="Phase" src="https://img.shields.io/badge/phase-6%20of%209%20%E2%80%94%20files-brightgreen">
   <img alt="Backend" src="https://img.shields.io/badge/backend-FastAPI%20%2B%20async%20SQLAlchemy-009688">
   <img alt="Python" src="https://img.shields.io/badge/python-3.12%2B-3776AB">
   <img alt="License" src="https://img.shields.io/badge/license-MIT-black">
@@ -36,7 +36,7 @@ reviewable slice of functionality with its own migration, tests, and progress no
 | Migrations | **Alembic** (async env) | Every schema change is a versioned, reviewable script — no auto-sync in any environment |
 | Real-time | **WebSockets + Redis pub/sub** | Horizontal-scale-ready fan-out: any instance can deliver an event to any connected client |
 | Background jobs | **Celery + Redis** | Email notifications and scheduled reminders off the request path |
-| File storage | **S3-compatible object storage / MinIO** *(Phase 6)* | Attachments never touch the app server's disk; downloads use presigned URLs |
+| File storage | **S3-compatible object storage / MinIO** | Attachments never touch the app server's disk; downloads use presigned URLs |
 
 ## Data model (Phase 1 + 2)
 
@@ -117,9 +117,25 @@ WS     /ws/projects/{project_id}?token=<jwt>
 GET    /api/notifications?page=&page_size=       GET  .../unread-count
 POST   /api/notifications/{id}/read              POST .../read-all
 WS     /ws/notifications?token=<jwt>
+POST   /api/tasks/{task_id}/attachments (multipart)   GET  .../attachments
+GET    /api/tasks/{task_id}/attachments/{id}/download
+DELETE /api/tasks/{task_id}/attachments/{id}
 ```
 
 Full interactive docs at `/docs` once the server is running.
+
+## File attachments
+
+Tasks can have file attachments, stored in MinIO (S3-compatible) rather than the app server's own
+disk — the API server never proxies file bytes on download. Upload goes through the API
+(`POST /api/tasks/{task_id}/attachments`, multipart), but download returns a **presigned URL**
+(`GET .../attachments/{id}/download`) that the client fetches directly from MinIO, valid for 5
+minutes. Files are capped at `MAX_ATTACHMENT_SIZE_MB` (10MB by default); there's no content-type
+restriction beyond that — MinIO never executes stored objects, so this isn't a code-execution
+surface the way serving uploads back through the app server would be.
+
+MinIO's own console is at `http://localhost:9001` (login: the `S3_ACCESS_KEY`/`S3_SECRET_KEY`
+values in `.env`) if you want to browse the bucket directly.
 
 ## Notifications & background jobs
 
@@ -138,11 +154,12 @@ task's project; mentioning a non-member's email is a silent no-op (not an error)
 
 ## Quickstart
 
-**Requirements:** Python 3.12+, Docker (for Postgres, Redis, MailDev), or your own local instances.
+**Requirements:** Python 3.12+, Docker (for Postgres, Redis, MailDev, MinIO), or your own local
+instances.
 
 ```bash
 # 1. Infrastructure
-docker compose up -d postgres redis maildev
+docker compose up -d postgres redis maildev minio
 
 # 2. Backend
 cd backend
@@ -186,7 +203,7 @@ pytest
 | **3** | Activity log + task filtering, sorting, search, pagination | ✅ **Done** |
 | **4** | Real-time: WebSocket endpoint, Redis pub/sub fan-out, presence tracking | ✅ **Done** |
 | **5** | Notifications (in-app + email via Celery) + due-soon reminders | ✅ **Done** |
-| 6 | File attachments on tasks (S3-compatible storage, presigned downloads) | ⏳ Planned |
+| **6** | File attachments on tasks (S3-compatible storage, presigned downloads) | ✅ **Done** |
 | 7 | Frontend — React 19 + TypeScript, boards, real-time client | ⏳ Planned |
 | 8 | Hardening — Docker Compose stack, structured logging, CI, health checks | ⏳ Planned |
 | 9 | Deployment — managed Postgres/Redis/object storage + hosted frontend | ⏳ Planned |
