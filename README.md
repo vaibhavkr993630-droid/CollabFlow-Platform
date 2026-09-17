@@ -7,7 +7,7 @@
 
 <p align="center">
   <img alt="Status" src="https://img.shields.io/badge/status-in%20development-blue">
-  <img alt="Phase" src="https://img.shields.io/badge/phase-6%20of%209%20%E2%80%94%20files-brightgreen">
+  <img alt="Phase" src="https://img.shields.io/badge/phase-7%20of%209%20%E2%80%94%20frontend-brightgreen">
   <img alt="Backend" src="https://img.shields.io/badge/backend-FastAPI%20%2B%20async%20SQLAlchemy-009688">
   <img alt="Python" src="https://img.shields.io/badge/python-3.12%2B-3776AB">
   <img alt="License" src="https://img.shields.io/badge/license-MIT-black">
@@ -37,6 +37,7 @@ reviewable slice of functionality with its own migration, tests, and progress no
 | Real-time | **WebSockets + Redis pub/sub** | Horizontal-scale-ready fan-out: any instance can deliver an event to any connected client |
 | Background jobs | **Celery + Redis** | Email notifications and scheduled reminders off the request path |
 | File storage | **S3-compatible object storage / MinIO** | Attachments never touch the app server's disk; downloads use presigned URLs |
+| Frontend | **React 19 + TypeScript, Vite, Tailwind v4, TanStack Query, `@dnd-kit`** | Optimistic UI + live WS-driven refresh on the same data TanStack Query already caches |
 
 ## Data model (Phase 1 + 2)
 
@@ -124,6 +125,35 @@ DELETE /api/tasks/{task_id}/attachments/{id}
 
 Full interactive docs at `/docs` once the server is running.
 
+## Frontend
+
+`frontend/` is a Vite + React 19 + TypeScript app. It's not yet in `docker-compose.yml` (that
+predates the frontend existing) — run it separately:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Serves on `http://localhost:5173`; Vite's dev proxy (`vite.config.ts`) forwards `/api` and `/ws`
+to the backend on `:8000`, so no CORS setup or `VITE_API_BASE_URL` is needed for local dev — that
+env var exists for production only, where the frontend and backend are on different domains.
+
+**WebSocket client** (`src/ws/useWebSocket.ts`) reconnects with exponential backoff (1s base,
+capped at 30s, with jitter), resetting to a fresh backoff schedule on every successful reconnect.
+It treats the backend's `4401` WS auth-failure close code specially (a higher base delay — retrying
+instantly with a token that was just rejected is more likely hammering a dead session than
+catching one about to refresh) and re-reads the current access token on every reconnect attempt
+rather than one captured at connect time, so a reconnect after a token refresh picks up the new
+one automatically.
+
+**A note on this repo's location under `/mnt/d/...`:** if you're on WSL2 with the project on a
+Windows-mounted drive, Vite's native file watcher may not pick up edits reliably (`vite.config.ts`
+already sets `server.watch.usePolling` for this reason — see [`docs/PHASE-7.md`](docs/PHASE-7.md)
+for how this was discovered). If HMR ever seems to silently stop working, that's the first thing
+to suspect.
+
 ## File attachments
 
 Tasks can have file attachments, stored in MinIO (S3-compatible) rather than the app server's own
@@ -172,10 +202,16 @@ alembic upgrade head
 
 # 4. Run
 uvicorn app.main:app --reload
+
+# 5. Frontend (separate terminal)
+cd ../frontend
+npm install
+npm run dev
 ```
 
 - API + interactive docs: <http://localhost:8000/docs>
 - Health check: <http://localhost:8000/health> — returns `{"status": "ok"}`
+- Frontend: <http://localhost:5173>
 
 ### Running the background worker
 
@@ -204,7 +240,7 @@ pytest
 | **4** | Real-time: WebSocket endpoint, Redis pub/sub fan-out, presence tracking | ✅ **Done** |
 | **5** | Notifications (in-app + email via Celery) + due-soon reminders | ✅ **Done** |
 | **6** | File attachments on tasks (S3-compatible storage, presigned downloads) | ✅ **Done** |
-| 7 | Frontend — React 19 + TypeScript, boards, real-time client | ⏳ Planned |
+| **7** | Frontend — React 19 + TypeScript, boards, real-time client | ✅ **Done** |
 | 8 | Hardening — Docker Compose stack, structured logging, CI, health checks | ⏳ Planned |
 | 9 | Deployment — managed Postgres/Redis/object storage + hosted frontend | ⏳ Planned |
 
@@ -216,11 +252,17 @@ backend/
     core/config.py       # typed settings (pydantic-settings)
     db/base.py           # DeclarativeBase + UUID / timestamp mixins
     db/session.py        # async engine + session dependency
-    models/              # User, Organization, Workspace, WorkspaceMembership
-    main.py              # FastAPI app + /health
+    models/              # User, Organization, Workspace, WorkspaceMembership, ...
+    main.py              # FastAPI app + lifespan + /health
   migrations/            # Alembic (async env) + versioned scripts
   pyproject.toml
-docker-compose.yml       # Postgres, Redis, MinIO for local dev
+frontend/
+  src/
+    api/                 # typed wrappers over the backend REST API
+    auth/                 # AuthContext, ProtectedRoute
+    ws/                    # WebSocket client (reconnect/backoff)
+    pages/, components/    # dashboard, Kanban board, task detail, notifications
+docker-compose.yml       # Postgres, Redis, MailDev, MinIO for local dev
 docs/                    # per-phase reports
 PROGRESS.md              # running phase log
 ```

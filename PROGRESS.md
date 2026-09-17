@@ -437,5 +437,75 @@ pytest
 
 ### Next
 
-**Phase 7 — Frontend:** React 19 + TypeScript, boards, the real-time WebSocket client.
-Backend feature work per the original brief's phase list is now complete.
+Phase 6 is done — backend feature work per the original brief's phase list is now complete.
+Next: Phase 7 (frontend).
+
+---
+
+## Phase 7 — Frontend ✅
+
+**Goal:** a real React app consuming everything Phases 1-6 built — auth, projects/tasks,
+real-time updates, notifications, and file attachments, all from one UI.
+
+### Delivered
+
+- **Stack**: Vite, React 19, TypeScript, Tailwind CSS v4, TanStack Query, React Router, React
+  Hook Form + Zod, `@dnd-kit`, oxlint.
+- **Auth** — login/register (React Hook Form + Zod), `AuthContext`, `ProtectedRoute`. The axios
+  client (`api/client.ts`) coalesces concurrent 401s into a **single** in-flight token-refresh
+  call rather than a refresh race per request, and clears tokens + redirects to `/login` if the
+  refresh itself fails.
+- **Dashboard** — org → workspace → project drill-down, backed by URL search params (`?org=` /
+  `?workspace=`) rather than component state, so the back button and direct links work.
+- **Kanban board** — `@dnd-kit` drag-and-drop between status columns, optimistic status updates
+  (TanStack Query `onMutate`/`onError`/`onSettled`) that roll back on failure, and a live WS
+  `task_updated` event invalidating the query so every connected client's board refreshes without
+  polling.
+- **Task detail panel** — inline-editable fields, label attach/detach, file attachment
+  upload/download, comments, and a live activity feed — the one view that touches every backend
+  phase at once.
+- **Notifications panel** — live unread count via its own WebSocket connection, plus REST for the
+  initial load and mark-read/mark-all-read.
+- **`useWebSocket`** — the one piece of this phase done at High effort, per the brief's own
+  effort-level guidance: a generic reconnect/backoff hook. Exponential backoff (1s base, capped
+  at 30s) with jitter, reset to a fresh schedule on every successful open; `getUrl()` re-evaluated
+  on every attempt (not captured once) so a reconnect after a token refresh picks up the new
+  token; the backend's `4401` WS-auth-failure code gets a slower retry base.
+- **Backend gained two endpoints the frontend needed and didn't have**: `GET /api/organizations`
+  and `GET /api/organizations/{id}/workspaces` (list, not just create) — there was no way to
+  enumerate a user's orgs/workspaces before this phase.
+
+### Three real bugs found via actual browser verification
+
+1. **`select(Organization).union(select(Organization))` silently returned raw column values
+   instead of ORM entities** once a test exercised the invited-member branch, not just the
+   owner-only one. SQLAlchemy's `.union()` on ORM-entity selects produces a Core-level compound
+   select that does not preserve entity mapping. Fixed by running two separate queries and
+   merging by id in Python instead.
+2. **The Kanban board requested `page_size=200`, but the backend caps it at 100** (Phase 3's own
+   pagination cap) — every board load returned a 422 and silently rendered as an empty board
+   rather than surfacing an error. Fixed the request to respect the real cap, and added an
+   explicit error state instead of a silent empty fallback.
+3. **Vite's file watcher doesn't reliably fire for edits on a Windows-mounted drive under WSL2**
+   — a just-applied fix kept appearing not to work because the dev server was still serving the
+   stale pre-fix bundle. Fixed with `server.watch.usePolling` in `vite.config.ts`.
+
+### Verify
+
+```bash
+docker compose up -d postgres redis minio maildev
+cd backend && pip install -e ".[dev]" && cp .env.example .env
+alembic upgrade head
+uvicorn app.main:app --reload &
+cd ../frontend && npm install && npm run dev
+```
+
+Full flow verified end-to-end against the real backend + Postgres/Redis/MinIO: register → create
+org/workspace/project → Kanban board → drag-and-drop between columns → task detail → add a
+comment → confirmed persisted. Backend: 65/65 tests pass (61 existing + 4 new for the list
+endpoints). Frontend: `tsc -b` clean, `oxlint` clean (no errors), production build succeeds.
+
+### Next
+
+**Phase 8 — Hardening:** full Docker Compose stack (backend/worker/beat) + Dockerfile + CI,
+structured logging, health checks that actually check DB/Redis connectivity.
