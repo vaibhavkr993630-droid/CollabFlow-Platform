@@ -46,3 +46,17 @@ async def list_members(db: AsyncSession, *, workspace_id: uuid.UUID) -> list[Wor
         select(WorkspaceMembership).where(WorkspaceMembership.workspace_id == workspace_id)
     )
     return list(result.scalars().all())
+
+
+async def list_for_user_in_org(
+    db: AsyncSession, *, organization_id: uuid.UUID, user_id: uuid.UUID
+) -> list[Workspace]:
+    result = await db.execute(
+        select(Workspace)
+        .join(WorkspaceMembership, WorkspaceMembership.workspace_id == Workspace.id)
+        .where(
+            Workspace.organization_id == organization_id,
+            WorkspaceMembership.user_id == user_id,
+        )
+    )
+    return list(result.scalars().all())

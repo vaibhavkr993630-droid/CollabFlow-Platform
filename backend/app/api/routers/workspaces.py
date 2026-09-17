@@ -42,6 +42,17 @@ async def create_workspace(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
 
+@router.get("", response_model=list[WorkspaceRead])
+async def list_workspaces(
+    organization_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[Workspace]:
+    return await workspace_crud.list_for_user_in_org(
+        db, organization_id=organization_id, user_id=current_user.id
+    )
+
+
 @member_router.get("/members", response_model=list[WorkspaceMemberRead])
 async def list_workspace_members(
     workspace_id: uuid.UUID,
