@@ -2,6 +2,7 @@ import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 
 import type { Task } from '../types'
+import { Avatar } from './Avatar'
 
 const PRIORITY_STYLES: Record<Task['priority'], string> = {
   low: 'bg-gray-100 text-gray-600',
@@ -12,10 +13,12 @@ const PRIORITY_STYLES: Record<Task['priority'], string> = {
 
 export function TaskCard({
   task,
+  assigneeName,
   onClick,
   dragging = false,
 }: {
   task: Task
+  assigneeName?: string
   onClick: () => void
   dragging?: boolean
 }) {
@@ -57,8 +60,13 @@ export function TaskCard({
           </span>
         ))}
       </div>
-      {task.due_date && (
-        <p className="text-xs text-gray-400">Due {new Date(task.due_date).toLocaleDateString()}</p>
+      {(task.due_date || assigneeName) && (
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs text-gray-400">
+            {task.due_date ? `Due ${new Date(task.due_date).toLocaleDateString()}` : ''}
+          </p>
+          {assigneeName && <Avatar name={assigneeName} size="sm" />}
+        </div>
       )}
     </div>
   )

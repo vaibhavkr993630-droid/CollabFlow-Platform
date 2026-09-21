@@ -8,11 +8,13 @@ export function KanbanColumn({
   id,
   title,
   tasks,
+  assigneeNames,
   onTaskClick,
 }: {
   id: string
   title: string
   tasks: Task[]
+  assigneeNames: Map<string, string>
   onTaskClick: (task: Task) => void
 }) {
   const { setNodeRef, isOver } = useDroppable({ id })
@@ -33,8 +35,18 @@ export function KanbanColumn({
       <SortableContext items={tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
         <div className="min-h-16 flex-1 space-y-2">
           {tasks.map((task) => (
-            <TaskCard key={task.id} task={task} onClick={() => onTaskClick(task)} />
+            <TaskCard
+              key={task.id}
+              task={task}
+              assigneeName={task.assignee_id ? assigneeNames.get(task.assignee_id) : undefined}
+              onClick={() => onTaskClick(task)}
+            />
           ))}
+          {tasks.length === 0 && (
+            <p className="px-1 py-3 text-center text-xs text-gray-400">
+              Drop a task here
+            </p>
+          )}
         </div>
       </SortableContext>
     </div>

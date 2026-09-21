@@ -7,7 +7,9 @@ import * as commentsApi from '../api/comments'
 import * as labelsApi from '../api/labels'
 import * as taskApi from '../api/tasks'
 import { useAuth } from '../auth/AuthContext'
-import type { TaskPriority, TaskStatus } from '../types'
+import { errorMessage, prettySummary, timeAgo } from '../lib/format'
+import type { ProjectMember, Task, TaskPriority, TaskStatus } from '../types'
+import { Avatar } from './Avatar'
 
 const STATUS_OPTIONS: TaskStatus[] = ['todo', 'in_progress', 'in_review', 'done']
 const PRIORITY_OPTIONS: TaskPriority[] = ['low', 'medium', 'high', 'urgent']
@@ -21,15 +23,22 @@ function formatBytes(bytes: number): string {
 export function TaskDetailPanel({
   taskId,
   projectId,
+  members,
   onClose,
 }: {
   taskId: string
   projectId: string
+  members: ProjectMember[]
   onClose: () => void
 }) {
   const { user } = useAuth()
   const queryClient = useQueryClient()
   const [commentBody, setCommentBody] = useState('')
+  const [newLabelName, setNewLabelName] = useState('')
+  const [newLabelColor, setNewLabelColor] = useState('#6366f1')
+  const [newSubtaskTitle, setNewSubtaskTitle] = useState('')
+  const nameOf = (userId: string) =>
+    members.find((m) => m.user_id === userId)?.user.full_name ?? 'Someone'
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const taskQuery = useQuery({
@@ -47,6 +56,10 @@ export function TaskDetailPanel({
   const attachmentsQuery = useQuery({
     queryKey: ['attachments', taskId],
     queryFn: () => attachmentsApi.listAttachments(taskId),
+  })
+  const subtasksQuery = useQuery({
+    queryKey: ['subtasks', taskId],
+    queryFn: () => taskApi.listSubtasks(taskId),
   })
   const activityQuery = useQuery({
     queryKey: ['activity', 'task', taskId],
@@ -68,6 +81,46 @@ export function TaskDetailPanel({
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['tasks', projectId] })
       onClose()
+    },
+  })
+
+  const createLabelMutation = useMutation({
+    mutationFn: () =>
+      labelsApi.createLabel(projectId, { name: newLabelName.trim(), color: newLabelColor }),
+    onSuccess: () => {
+      setNewLabelName('')
+      void queryClient.invalidateQueries({ queryKey: ['labels', projectId] })
+    },
+  })
+
+  const createSubtaskMutation = useMutation({
+    mutationFn: (title: string) =>
+      taskApi.createTask(projectId, { title, parent_task_id: taskId }),
+    onSuccess: () => {
+      setNewSubtaskTitle('')
+      void queryClient.invalidateQueries({ queryKey: ['subtasks', taskId] })
+      void queryClient.invalidateQueries({ queryKey: ['activity', 'task', taskId] })
+    },
+  })
+
+  const toggleSubtaskMutation = useMutation({
+    mutationFn: ({ id, done }: { id: string; done: boolean }) =>
+      taskApi.updateTask(id, { status: done ? 'done' : 'todo' }),
+    // Flip the checkbox immediately and roll back if the request fails, the
+    // same optimistic pattern the board uses for drag-and-drop.
+    onMutate: async ({ id, done }) => {
+      await queryClient.cancelQueries({ queryKey: ['subtasks', taskId] })
+      const previous = queryClient.getQueryData<Task[]>(['subtasks', taskId])
+      queryClient.setQueryData<Task[]>(['subtasks', taskId], (old) =>
+        old?.map((t) => (t.id === id ? { ...t, status: done ? 'done' : 'todo' } : t)),
+      )
+      return { previous }
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) queryClient.setQueryData(['subtasks', taskId], context.previous)
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: ['subtasks', taskId] })
     },
   })
 
@@ -181,15 +234,41 @@ export function TaskDetailPanel({
               </div>
             </div>
 
-            <div className="mb-4">
-              <label className="mb-1 block text-xs font-medium text-gray-500">Due date</label>
-              <input
-                type="date"
-                defaultValue={task.due_date ?? ''}
-                onChange={(e) => updateMutation.mutate({ due_date: e.target.value || null })}
-                className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
-              />
+            <div className="mb-4 grid grid-cols-2 gap-3">
+              <div>
+                <label
+                  htmlFor="task-assignee"
+                  className="mb-1 block text-xs font-medium text-gray-500"
+                >
+                  Assignee
+                </label>
+                <select
+                  id="task-assignee"
+                  value={task.assignee_id ?? ''}
+                  onChange={(e) => updateMutation.mutate({ assignee_id: e.target.value || null })}
+                  className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+                >
+                  <option value="">Unassigned</option>
+                  {members.map((m) => (
+                    <option key={m.user_id} value={m.user_id}>
+                      {m.user.full_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-500">Due date</label>
+                <input
+                  type="date"
+                  defaultValue={task.due_date ?? ''}
+                  onChange={(e) => updateMutation.mutate({ due_date: e.target.value || null })}
+                  className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+                />
+              </div>
             </div>
+            {updateMutation.isError && (
+              <p className="mb-3 text-sm text-red-600">{errorMessage(updateMutation.error)}</p>
+            )}
 
             <div className="mb-4">
               <label className="mb-1 block text-xs font-medium text-gray-500">Description</label>
@@ -204,6 +283,9 @@ export function TaskDetailPanel({
             <div className="mb-4">
               <label className="mb-1 block text-xs font-medium text-gray-500">Labels</label>
               <div className="flex flex-wrap gap-1.5">
+                {labelsQuery.data?.length === 0 && (
+                  <p className="text-xs text-gray-400">No labels yet. Create the first one below.</p>
+                )}
                 {labelsQuery.data?.map((label) => {
                   const active = task.labels.some((l) => l.id === label.id)
                   return (
@@ -222,7 +304,89 @@ export function TaskDetailPanel({
                   )
                 })}
               </div>
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  if (newLabelName.trim()) createLabelMutation.mutate()
+                }}
+                className="mt-2 flex items-center gap-2"
+              >
+                <input
+                  type="color"
+                  value={newLabelColor}
+                  onChange={(e) => setNewLabelColor(e.target.value)}
+                  aria-label="Label colour"
+                  className="h-7 w-7 cursor-pointer rounded border border-gray-300 p-0.5"
+                />
+                <input
+                  value={newLabelName}
+                  onChange={(e) => setNewLabelName(e.target.value)}
+                  placeholder="New label name"
+                  className="min-w-0 flex-1 rounded-lg border border-gray-300 px-2 py-1 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 focus:outline-none"
+                />
+                <button
+                  type="submit"
+                  disabled={createLabelMutation.isPending || !newLabelName.trim()}
+                  className="text-sm text-brand-600 hover:underline disabled:opacity-50"
+                >
+                  Create
+                </button>
+              </form>
+              {createLabelMutation.isError && (
+                <p className="mt-1 text-sm text-red-600">
+                  {errorMessage(createLabelMutation.error)}
+                </p>
+              )}
             </div>
+
+            <section className="mb-6">
+              <h3 className="mb-2 text-xs font-semibold tracking-wide text-gray-500 uppercase">
+                Subtasks
+                {subtasksQuery.data && subtasksQuery.data.length > 0 && (
+                  <span className="ml-1 font-normal normal-case">
+                    ({subtasksQuery.data.filter((t) => t.status === 'done').length}/
+                    {subtasksQuery.data.length} done)
+                  </span>
+                )}
+              </h3>
+              <div className="space-y-1">
+                {subtasksQuery.data?.map((subtask) => (
+                  <label key={subtask.id} className="flex items-center gap-2 text-sm text-gray-800">
+                    <input
+                      type="checkbox"
+                      checked={subtask.status === 'done'}
+                      onChange={(e) =>
+                        toggleSubtaskMutation.mutate({ id: subtask.id, done: e.target.checked })
+                      }
+                    />
+                    <span className={subtask.status === 'done' ? 'text-gray-400 line-through' : ''}>
+                      {subtask.title}
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  if (newSubtaskTitle.trim()) createSubtaskMutation.mutate(newSubtaskTitle.trim())
+                }}
+                className="mt-2 flex gap-2"
+              >
+                <input
+                  value={newSubtaskTitle}
+                  onChange={(e) => setNewSubtaskTitle(e.target.value)}
+                  placeholder="Add a subtask…"
+                  className="min-w-0 flex-1 rounded-lg border border-gray-300 px-2 py-1 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 focus:outline-none"
+                />
+                <button
+                  type="submit"
+                  disabled={createSubtaskMutation.isPending || !newSubtaskTitle.trim()}
+                  className="text-sm text-brand-600 hover:underline disabled:opacity-50"
+                >
+                  Add
+                </button>
+              </form>
+            </section>
 
             <section className="mb-6">
               <h3 className="mb-2 text-xs font-semibold tracking-wide text-gray-500 uppercase">
@@ -279,12 +443,21 @@ export function TaskDetailPanel({
                 Comments
               </h3>
               <div className="space-y-3">
+                {commentsQuery.data?.length === 0 && (
+                  <p className="text-xs text-gray-400">No comments yet. Start the conversation.</p>
+                )}
                 {commentsQuery.data?.map((comment) => (
-                  <div key={comment.id} className="rounded-lg bg-gray-50 p-3 text-sm">
-                    <p className="whitespace-pre-wrap text-gray-800">{comment.body}</p>
-                    <p className="mt-1 text-xs text-gray-400">
-                      {new Date(comment.created_at).toLocaleString()}
-                    </p>
+                  <div key={comment.id} className="flex gap-2">
+                    <Avatar name={nameOf(comment.author_id)} size="sm" />
+                    <div className="min-w-0 flex-1 rounded-lg bg-gray-50 p-3 text-sm">
+                      <p className="mb-0.5 text-xs">
+                        <span className="font-medium text-gray-700">
+                          {nameOf(comment.author_id)}
+                        </span>{' '}
+                        <span className="text-gray-400">{timeAgo(comment.created_at)}</span>
+                      </p>
+                      <p className="whitespace-pre-wrap text-gray-800">{comment.body}</p>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -318,7 +491,8 @@ export function TaskDetailPanel({
               <div className="space-y-1.5">
                 {activityQuery.data?.items.map((entry) => (
                   <p key={entry.id} className="text-xs text-gray-500">
-                    {entry.summary} · {new Date(entry.created_at).toLocaleString()}
+                    <span className="font-medium">{nameOf(entry.actor_id)}</span> {prettySummary(entry.summary)} ·{' '}
+                    {timeAgo(entry.created_at)}
                   </p>
                 ))}
               </div>

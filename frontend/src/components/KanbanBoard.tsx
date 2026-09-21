@@ -22,10 +22,15 @@ const COLUMNS: { id: TaskStatus; label: string }[] = [
 
 export function KanbanBoard({
   tasks,
+  assigneeNames,
+  keepServerOrder,
   onStatusChange,
   onTaskClick,
 }: {
   tasks: Task[]
+  assigneeNames: Map<string, string>
+  /** When the list was sorted by the server (not "board order"), keep that order in each column. */
+  keepServerOrder: boolean
   onStatusChange: (taskId: string, status: TaskStatus) => void
   onTaskClick: (task: Task) => void
 }) {
@@ -66,15 +71,23 @@ export function KanbanBoard({
             key={column.id}
             id={column.id}
             title={column.label}
+            assigneeNames={assigneeNames}
             tasks={tasks
               .filter((t) => t.status === column.id)
-              .sort((a, b) => a.position - b.position)}
+              .sort((a, b) => (keepServerOrder ? 0 : a.position - b.position))}
             onTaskClick={onTaskClick}
           />
         ))}
       </div>
       <DragOverlay>
-        {activeTask && <TaskCard task={activeTask} onClick={() => {}} dragging />}
+        {activeTask && (
+          <TaskCard
+            task={activeTask}
+            assigneeName={activeTask.assignee_id ? assigneeNames.get(activeTask.assignee_id) : undefined}
+            onClick={() => {}}
+            dragging
+          />
+        )}
       </DragOverlay>
     </DndContext>
   )
