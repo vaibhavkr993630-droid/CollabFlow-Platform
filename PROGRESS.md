@@ -507,5 +507,85 @@ endpoints). Frontend: `tsc -b` clean, `oxlint` clean (no errors), production bui
 
 ### Next
 
-**Phase 8 — Hardening:** full Docker Compose stack (backend/worker/beat) + Dockerfile + CI,
-structured logging, health checks that actually check DB/Redis connectivity.
+Phase 7 is done. Next: Phase 8 (hardening — containers, CI, logging, health checks).
+
+---
+
+## Phase 8 — Hardening ✅
+
+**Goal:** make the app runnable the same way anywhere, checked automatically on every push, and
+diagnosable when something breaks. Delivered as two commits: the application code first (logging,
+Sentry, health check, presigned URLs), then the packaging around it (Docker, Compose, CI).
+
+### Delivered
+
+- **`backend/Dockerfile` + full `docker-compose.yml`** — `backend`, `worker`, `beat`, and a
+  one-shot `migrate` service the other three wait on (`depends_on: condition:
+  service_completed_successfully`), so the schema is applied exactly once instead of three
+  containers racing to build it. Postgres, Redis and MinIO have health checks, and dependent
+  services wait for `service_healthy`.
+- **CI** (`.github/workflows/backend-ci.yml`) — on every push/PR touching `backend/**`: `ruff`,
+  `alembic upgrade head` against a real Postgres, then the full `pytest` run. Postgres and Redis
+  are Actions service containers; MinIO is started with a plain `docker run` because service
+  containers can't override the image's command and `minio/minio` needs `server /data` to start.
+- **Structured JSON logging** (`app/core/logging_config.py`) for the API and — through Celery's
+  `after_setup_logger` / `after_setup_task_logger` signals — the worker.
+- **Optional Sentry** (`sentry-sdk[fastapi]`), initialized only when `SENTRY_DSN` is set.
+- **`/health` checks Postgres (`SELECT 1`) and Redis (`PING`)** and returns `503` naming what
+  failed. MinIO and SMTP are deliberately not checked (not on the critical path for most endpoints).
+- **Presigned-URL fix** — a second boto3 client (`get_presign_client`) that signs against
+  `S3_PUBLIC_ENDPOINT_URL`, so download URLs work outside the Docker network.
+
+### Decisions
+
+- **One-shot `migrate` service, not "migrate on backend startup".** With three services needing
+  the schema, running migrations inside each would race; a single job that must finish first is
+  the honest way to order it.
+- **`alembic upgrade head` as its own CI step.** The tests build their schema with
+  `Base.metadata.create_all`, which is regenerated from the models each run and so can never see a
+  hand-written migration drifting away from them. Only running the migrations for real can.
+- **Health check scope.** It answers "can this instance serve requests", not "is everything
+  working" — so it checks the two things every request needs and leaves MinIO/SMTP out.
+- **Sentry as a config flag, not a hard dependency on an account.** The description that is true:
+  integrated behind a flag, no Sentry project created yet.
+
+### Three bugs found only by running against real infrastructure
+
+1. **DEBUG flooded stdout with botocore internals.** With `settings.debug=True` the root logger
+   went to DEBUG, which applies to every library, not just this app. Fixed by keeping root at INFO
+   and opting into DEBUG per logger (`logging.getLogger("app")`).
+2. **Every SQL line printed twice.** `create_async_engine(echo=True)` attaches SQLAlchemy's own
+   handler in addition to propagating to root, where the new JSON handler also caught it. Fixed
+   with `echo=False`.
+3. **Presigned URLs were unusable outside the Docker network.** A presigned URL bakes in the host
+   of the client that signed it (SigV4 signs the host), so the internal client produced
+   `http://minio:9000/...`. Nothing about the URL looks wrong and no unit test on its shape would
+   fail — it only breaks when something outside the network uses it. Fixed with the second,
+   signing-only client. Verified by uploading through the containerized stack, downloading via the
+   presigned URL from the host, and comparing bytes.
+
+### Known simplifications
+
+- The containers run as root (Celery warns about it on worker startup); a non-root `USER` is a
+  small change worth making before real production use.
+- CI does not publish the image, and covers only the backend — the frontend's `tsc` / `oxlint` /
+  build are not yet in any pipeline.
+- The credentials in `docker-compose.yml` are development defaults.
+
+### Verify
+
+```bash
+docker compose up -d --build
+curl -s localhost:8000/health                  # 200 {"status":"ok"}
+docker compose stop redis                       # then /health -> 503 {"failed":["redis"]}
+cd backend && pytest && ruff check app tests migrations    # 65 passed, lint clean
+```
+
+Verified for real: all 7 services came up (`migrate` exited 0 first); `/health` went 200 → 503 →
+200 as Redis was stopped and restarted; every backend log line was JSON; an uploaded file fetched
+through its presigned URL from the host matched byte for byte.
+
+### Next
+
+**Phase 9 — Deployment:** the hosted infrastructure described as code, real secrets replacing the
+development defaults, real SMTP, and the frontend deployed as a static build.

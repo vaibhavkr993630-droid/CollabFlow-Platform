@@ -7,8 +7,8 @@
 
 | In | Out (later phases) |
 |---|---|
-| Vite + React 19 + TypeScript + Tailwind v4 | Docker Compose frontend service (Phase 8) |
-| Auth, dashboard, Kanban board, task detail, notifications | CI, structured logging (Phase 8) |
+| Vite + React 19 + TypeScript + Tailwind v4 | Backend containers and Compose stack (Phase 8) |
+| Auth, dashboard, Kanban board, task detail, notifications | Backend CI, structured logging (Phase 8) |
 | WebSocket client with reconnect/backoff | Production hosting (Phase 9) |
 | Two backend list endpoints the frontend needed | — |
 
@@ -164,6 +164,7 @@ npm run dev                       # http://localhost:5173, proxies /api and /ws 
 
 ## What Phase 8 builds on this
 
-Phase 8 brings the frontend into `docker-compose.yml` (this phase deliberately left it running
-standalone via `npm run dev`) and adds the CI pipeline that runs the backend test suite and the
-frontend's `tsc`/lint/build checks on every push.
+Phase 8 hardens the **backend**: a container image and a full Docker Compose stack, a CI
+pipeline for the backend test suite, structured logging, and a real health check. It deliberately
+does not containerize the frontend or add frontend checks to CI — this phase leaves the frontend
+running standalone via `npm run dev`, and Phase 9 ships it as a static build on Vercel instead.

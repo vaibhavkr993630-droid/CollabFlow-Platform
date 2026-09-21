@@ -6,8 +6,9 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/vaibhavkr993630-droid/CollabFlow-Platform/actions/workflows/backend-ci.yml"><img alt="Backend CI" src="https://github.com/vaibhavkr993630-droid/CollabFlow-Platform/actions/workflows/backend-ci.yml/badge.svg"></a>
   <img alt="Status" src="https://img.shields.io/badge/status-in%20development-blue">
-  <img alt="Phase" src="https://img.shields.io/badge/phase-7%20of%209%20%E2%80%94%20frontend-brightgreen">
+  <img alt="Phase" src="https://img.shields.io/badge/phase-8%20of%209%20%E2%80%94%20hardening-brightgreen">
   <img alt="Backend" src="https://img.shields.io/badge/backend-FastAPI%20%2B%20async%20SQLAlchemy-009688">
   <img alt="Python" src="https://img.shields.io/badge/python-3.12%2B-3776AB">
   <img alt="License" src="https://img.shields.io/badge/license-MIT-black">
@@ -184,8 +185,23 @@ task's project; mentioning a non-member's email is a silent no-op (not an error)
 
 ## Quickstart
 
-**Requirements:** Python 3.12+, Docker (for Postgres, Redis, MailDev, MinIO), or your own local
-instances.
+**Requirements:** Docker. For the second option also Python 3.12+ and Node 20+.
+
+There are two ways to run the backend locally — pick whichever fits what you're doing.
+
+### Option A: the whole backend stack in Docker (fastest way to just run it)
+
+```bash
+docker compose up -d --build
+```
+
+Brings up Postgres, Redis, MinIO, MailDev, the API, a Celery worker and Celery Beat, building the
+backend image from [`backend/Dockerfile`](backend/Dockerfile). A one-shot `migrate` service applies
+the Alembic migrations first; `backend`, `worker` and `beat` wait for it to exit successfully. The
+API is then at <http://localhost:8000/docs>. The frontend is not part of Compose — run it as in
+step 5 below.
+
+### Option B: infrastructure in Docker, backend on your machine (for active backend work)
 
 ```bash
 # 1. Infrastructure
@@ -210,10 +226,11 @@ npm run dev
 ```
 
 - API + interactive docs: <http://localhost:8000/docs>
-- Health check: <http://localhost:8000/health> — returns `{"status": "ok"}`
+- Health check: <http://localhost:8000/health> — checks Postgres and Redis, not just that the
+  process is alive: `200 {"status": "ok"}` when both answer, `503` naming the one that didn't
 - Frontend: <http://localhost:5173>
 
-### Running the background worker
+### Running the background worker (Option B only — Option A already runs these)
 
 Needed for email sending and the due-soon reminder job — the API queues Celery tasks regardless
 of whether a worker is running, so nothing breaks without one, but nothing gets delivered either.
@@ -227,8 +244,24 @@ celery -A app.workers.celery_app beat --loglevel=info      # schedules the daily
 
 ```bash
 cd backend
-pytest
+pytest                              # against real Postgres, Redis and MinIO
+ruff check app tests migrations     # the lint step CI runs
 ```
+
+CI (`.github/workflows/backend-ci.yml`) runs exactly this on every push or pull request touching
+`backend/**`, plus `alembic upgrade head` against a real Postgres — see
+[`docs/PHASE-8.md`](docs/PHASE-8.md) for why each step is there.
+
+## Operations
+
+- **Logs** are one JSON object per line (`timestamp`, `level`, `logger`, `message`, and
+  `exception` when there is a traceback), from both the API and the Celery worker.
+- **Error tracking:** set `SENTRY_DSN` to enable Sentry. Unset (the default), it never
+  initializes and the app behaves identically.
+- **S3 endpoints:** `S3_ENDPOINT_URL` is what the backend itself uses for uploads and deletes
+  (inside Compose, the service name `http://minio:9000`). `S3_PUBLIC_ENDPOINT_URL` is what gets
+  baked into presigned download URLs handed to browsers, which cannot resolve `minio`
+  (`http://localhost:9000` in Compose). Leave it unset outside Docker, where both are localhost.
 
 ## Roadmap
 
@@ -241,7 +274,7 @@ pytest
 | **5** | Notifications (in-app + email via Celery) + due-soon reminders | ✅ **Done** |
 | **6** | File attachments on tasks (S3-compatible storage, presigned downloads) | ✅ **Done** |
 | **7** | Frontend — React 19 + TypeScript, boards, real-time client | ✅ **Done** |
-| 8 | Hardening — Docker Compose stack, structured logging, CI, health checks | ⏳ Planned |
+| **8** | Hardening — Docker Compose stack, structured logging, CI, health checks | ✅ **Done** |
 | 9 | Deployment — managed Postgres/Redis/object storage + hosted frontend | ⏳ Planned |
 
 ## Repository layout
@@ -262,7 +295,7 @@ frontend/
     auth/                 # AuthContext, ProtectedRoute
     ws/                    # WebSocket client (reconnect/backoff)
     pages/, components/    # dashboard, Kanban board, task detail, notifications
-docker-compose.yml       # Postgres, Redis, MailDev, MinIO for local dev
+docker-compose.yml       # Postgres, Redis, MailDev, MinIO + API, worker, beat, one-shot migrate
 docs/                    # per-phase reports
 PROGRESS.md              # running phase log
 ```

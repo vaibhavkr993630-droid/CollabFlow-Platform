@@ -19,12 +19,24 @@ services:
     image: redis:7-alpine
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   maildev:
     image: maildev/maildev:2.1.0
     ports:
       - "1080:1080" # web UI — view sent mail at http://localhost:1080
       - "1025:1025" # SMTP — no credentials needed, catches everything
+    # The image's own baked-in HEALTHCHECK does `wget localhost:1080`, which
+    # resolves "localhost" to ::1 first and fails — the server only listens on
+    # 0.0.0.0, not ::1. Cosmetic (nothing here depends on maildev being
+    # "healthy"; email sending works regardless — verified via a live worker
+    # run), but disabling it keeps `docker ps` from reporting a false negative.
+    healthcheck:
+      disable: true
 
   minio:
     image: minio/minio:latest
@@ -37,6 +49,67 @@ services:
       - "9001:9001"
     volumes:
       - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # One-shot: applies migrations, then exits. `backend` waits on this exiting 0
+  # rather than racing schema setup against serving its first request.
+  migrate:
+    build: ./backend
+    command: alembic upgrade head
+    environment: &backend_env
+      DATABASE_URL: postgresql+asyncpg://collabflow:collabflow@postgres:5432/collabflow
+      REDIS_URL: redis://redis:6379/0
+      SMTP_HOST: maildev
+      SMTP_PORT: "1025"
+      S3_ENDPOINT_URL: http://minio:9000
+      # Presigned URLs are handed to external clients (a browser, curl from the
+      # host) that can't resolve "minio" — see storage.get_presign_client's
+      # docstring. This must be reachable from wherever the client actually is,
+      # not from inside the Compose network.
+      S3_PUBLIC_ENDPOINT_URL: http://localhost:9000
+      S3_ACCESS_KEY: collabflow
+      S3_SECRET_KEY: collabflow123
+      JWT_SECRET_KEY: change-me-in-production
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  backend:
+    build: ./backend
+    environment: *backend_env
+    ports:
+      - "8000:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  worker:
+    build: ./backend
+    command: celery -A app.workers.celery_app worker --loglevel=info
+    environment: *backend_env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  beat:
+    build: ./backend
+    command: celery -A app.workers.celery_app beat --loglevel=info
+    environment: *backend_env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
 
 volumes:
   postgres_data:
