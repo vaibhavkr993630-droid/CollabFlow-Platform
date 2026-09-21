@@ -23,6 +23,11 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 15
     refresh_token_expire_days: int = 7
 
+    # Password reset. The emailed link points at the *frontend* (which then calls the
+    # API), so this must be wherever the frontend is actually served.
+    frontend_url: str = "http://localhost:5173"
+    password_reset_expire_minutes: int = 30
+
     # Redis
     redis_url: str = "redis://localhost:6379/0"
 

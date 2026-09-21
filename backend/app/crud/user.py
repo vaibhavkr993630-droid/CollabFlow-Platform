@@ -26,3 +26,8 @@ async def create(db: AsyncSession, user_in: UserCreate) -> User:
     db.add(user)
     await db.flush()
     return user
+
+
+async def set_password(db: AsyncSession, user: User, new_password: str) -> None:
+    user.hashed_password = hash_password(new_password)
+    await db.flush()

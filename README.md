@@ -101,6 +101,7 @@ WS ticket via an authenticated REST call instead of reusing the access token her
 
 ```
 POST   /api/auth/register | login | refresh        GET /api/auth/me
+POST   /api/auth/forgot-password | reset-password    (emailed, single-use, 30-minute link)
 POST   /api/organizations                           GET  /api/organizations
 POST   /api/organizations/{org_id}/workspaces        GET  .../workspaces
 GET/POST  /api/workspaces/{workspace_id}/members
