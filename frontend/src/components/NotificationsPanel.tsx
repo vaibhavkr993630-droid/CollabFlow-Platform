@@ -3,18 +3,9 @@ import { useState } from 'react'
 
 import * as notificationsApi from '../api/notifications'
 import { useAuth } from '../auth/AuthContext'
+import { timeAgo } from '../lib/format'
 import type { Notification } from '../types'
 import { useNotificationSocket } from '../ws/useNotificationSocket'
-
-function timeAgo(iso: string): string {
-  const seconds = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
-  if (seconds < 60) return 'just now'
-  const minutes = Math.floor(seconds / 60)
-  if (minutes < 60) return `${minutes}m ago`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h ago`
-  return `${Math.floor(hours / 24)}d ago`
-}
 
 export function NotificationsPanel() {
   const { user } = useAuth()

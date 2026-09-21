@@ -21,10 +21,17 @@ export interface Workspace {
   organization_id: string
 }
 
+export interface MemberUser {
+  id: string
+  email: string
+  full_name: string
+}
+
 export interface WorkspaceMember {
   id: string
   user_id: string
   role: Role
+  user: MemberUser
 }
 
 export interface Project {
@@ -39,6 +46,7 @@ export interface ProjectMember {
   id: string
   user_id: string
   role: Role
+  user: MemberUser
 }
 
 export type TaskStatus = 'todo' | 'in_progress' | 'in_review' | 'done'

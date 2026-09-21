@@ -6,6 +6,11 @@ export async function listProjects(workspaceId: string): Promise<Project[]> {
   return data
 }
 
+export async function getProject(projectId: string): Promise<Project> {
+  const { data } = await apiClient.get<Project>(`/api/projects/${projectId}`)
+  return data
+}
+
 export async function createProject(
   workspaceId: string,
   input: { name: string; description?: string },

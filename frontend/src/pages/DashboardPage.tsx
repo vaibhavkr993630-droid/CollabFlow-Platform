@@ -5,6 +5,9 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import * as orgApi from '../api/organizations'
 import * as projectApi from '../api/projects'
 import { Layout } from '../components/Layout'
+import { MembersPanel } from '../components/MembersPanel'
+import { errorMessage } from '../lib/format'
+import type { Role } from '../types'
 
 export default function DashboardPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -32,6 +35,20 @@ export default function DashboardPage() {
     queryKey: ['projects', workspaceId],
     queryFn: () => projectApi.listProjects(workspaceId!),
     enabled: !!workspaceId,
+  })
+
+  const membersQuery = useQuery({
+    queryKey: ['workspace-members', workspaceId],
+    queryFn: () => orgApi.listWorkspaceMembers(workspaceId!),
+    enabled: !!workspaceId,
+  })
+
+  const inviteMember = useMutation({
+    mutationFn: ({ email, role }: { email: string; role: Role }) =>
+      orgApi.inviteWorkspaceMember(workspaceId!, email, role),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['workspace-members', workspaceId] })
+    },
   })
 
   const createOrg = useMutation({
@@ -65,6 +82,9 @@ export default function DashboardPage() {
     <Layout>
       <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
         <Column title="Organizations">
+          {orgsQuery.data?.length === 0 && (
+            <EmptyHint text="No organizations yet. Create your first one below to get started." />
+          )}
           {orgsQuery.data?.map((org) => (
             <ListItem
               key={org.id}
@@ -84,6 +104,9 @@ export default function DashboardPage() {
 
         <Column title="Workspaces">
           {!orgId && <EmptyHint text="Select an organization" />}
+          {orgId && workspacesQuery.data?.length === 0 && (
+            <EmptyHint text="No workspaces here yet. Add one below." />
+          )}
           {workspacesQuery.data?.map((workspace) => (
             <ListItem
               key={workspace.id}
@@ -107,6 +130,9 @@ export default function DashboardPage() {
 
         <Column title="Projects">
           {!workspaceId && <EmptyHint text="Select a workspace" />}
+          {workspaceId && projectsQuery.data?.length === 0 && (
+            <EmptyHint text="No projects yet. Add one below to open its board." />
+          )}
           {projectsQuery.data?.map((project) => (
             <ListItem
               key={project.id}
@@ -127,6 +153,30 @@ export default function DashboardPage() {
           )}
         </Column>
       </div>
+
+      {(createOrg.isError || createWorkspace.isError || createProject.isError) && (
+        <p className="mt-3 text-sm text-red-600">
+          {errorMessage(createOrg.error ?? createWorkspace.error ?? createProject.error)}
+        </p>
+      )}
+
+      {workspaceId && (
+        <section className="mt-6 rounded-xl border border-gray-200 bg-white p-4">
+          <h2 className="mb-1 text-sm font-semibold text-gray-500 uppercase">
+            Workspace members
+          </h2>
+          <p className="mb-3 text-xs text-gray-400">
+            Workspace members can see the list of projects. To open a project's board, a person
+            must also be added to that project (use Members on the board).
+          </p>
+          <MembersPanel
+            noun="workspace"
+            members={membersQuery.data ?? []}
+            isLoading={membersQuery.isLoading}
+            onInvite={(email, role) => inviteMember.mutateAsync({ email, role })}
+          />
+        </section>
+      )}
     </Layout>
   )
 }
