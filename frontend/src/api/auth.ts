@@ -25,3 +25,18 @@ export async function fetchMe(): Promise<User> {
   const { data } = await apiClient.get<User>('/api/auth/me')
   return data
 }
+
+export async function forgotPassword(email: string): Promise<{ message: string }> {
+  const { data } = await apiClient.post<{ message: string }>('/api/auth/forgot-password', {
+    email,
+  })
+  return data
+}
+
+export async function resetPassword(input: {
+  token: string
+  new_password: string
+}): Promise<{ message: string }> {
+  const { data } = await apiClient.post<{ message: string }>('/api/auth/reset-password', input)
+  return data
+}

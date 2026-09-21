@@ -6,11 +6,17 @@ import { z } from 'zod'
 
 import { useAuth } from '../auth/AuthContext'
 
-const schema = z.object({
-  full_name: z.string().min(1, 'Name is required'),
-  email: z.string().email('Enter a valid email'),
-  password: z.string().min(8, 'Password must be at least 8 characters'),
-})
+const schema = z
+  .object({
+    full_name: z.string().min(1, 'Name is required'),
+    email: z.string().email('Enter a valid email'),
+    password: z.string().min(8, 'Password must be at least 8 characters'),
+    confirm_password: z.string().min(1, 'Please confirm your password'),
+  })
+  .refine((data) => data.password === data.confirm_password, {
+    message: 'Passwords do not match',
+    path: ['confirm_password'],
+  })
 
 type FormValues = z.infer<typeof schema>
 
@@ -85,6 +91,25 @@ export default function RegisterPage() {
             />
             {errors.password && (
               <p className="mt-1 text-xs text-red-600">{errors.password.message}</p>
+            )}
+          </div>
+
+          <div>
+            <label
+              htmlFor="confirm_password"
+              className="mb-1 block text-sm font-medium text-gray-700"
+            >
+              Confirm password
+            </label>
+            <input
+              id="confirm_password"
+              type="password"
+              autoComplete="new-password"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 focus:outline-none"
+              {...register('confirm_password')}
+            />
+            {errors.confirm_password && (
+              <p className="mt-1 text-xs text-red-600">{errors.confirm_password.message}</p>
             )}
           </div>
 
