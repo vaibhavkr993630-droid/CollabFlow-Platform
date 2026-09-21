@@ -9,6 +9,23 @@ from app.core.config import get_settings
 settings = get_settings()
 
 _client = None
+_presign_client = None
+
+
+def _build_client(endpoint_url: str):
+    return boto3.client(
+        "s3",
+        endpoint_url=endpoint_url,
+        aws_access_key_id=settings.s3_access_key,
+        aws_secret_access_key=settings.s3_secret_key,
+        # region_name is meaningless to MinIO but required here: without it,
+        # boto3 tries to resolve a region via the EC2 instance metadata service
+        # (169.254.169.254) before falling back, which hangs for a long time
+        # (not a quick failure) in any environment where that address is
+        # unreachable — every non-EC2 environment, including local dev/CI.
+        region_name="us-east-1",
+        config=Config(signature_version="s3v4"),
+    )
 
 
 def get_s3_client():
@@ -16,23 +33,33 @@ def get_s3_client():
     Module-level singleton, same reasoning as get_redis_client()/engine: boto3
     clients are safe to share across requests (thread-safe, manage their own
     connection pool under the hood) — no need to build a new one per call.
+
+    Used for every actual I/O operation (put/get/delete/head) — talks to
+    settings.s3_endpoint_url, the *internal* address (e.g. the Docker Compose
+    service name "minio"). Presigned URL generation deliberately does NOT use
+    this client — see get_presign_client below.
     """
     global _client
     if _client is None:
-        _client = boto3.client(
-            "s3",
-            endpoint_url=settings.s3_endpoint_url,
-            aws_access_key_id=settings.s3_access_key,
-            aws_secret_access_key=settings.s3_secret_key,
-            # region_name is meaningless to MinIO but required here: without it,
-            # boto3 tries to resolve a region via the EC2 instance metadata service
-            # (169.254.169.254) before falling back, which hangs for a long time
-            # (not a quick failure) in any environment where that address is
-            # unreachable — every non-EC2 environment, including local dev/CI.
-            region_name="us-east-1",
-            config=Config(signature_version="s3v4"),
-        )
+        _client = _build_client(settings.s3_endpoint_url)
     return _client
+
+
+def get_presign_client():
+    """
+    A presigned URL bakes in the client's configured endpoint as the URL's host
+    — so generating one with the internal-network client would hand an external
+    caller (a browser, curl from the host machine) a URL like
+    http://minio:9000/... that only resolves *inside* the Docker network. This
+    client is configured with s3_public_endpoint_url instead (falls back to
+    s3_endpoint_url when unset — correct for local dev without Docker, where
+    both already point at localhost) purely so the *signature* is computed
+    against the externally-reachable host. It's never used for actual I/O.
+    """
+    global _presign_client
+    if _presign_client is None:
+        _presign_client = _build_client(settings.s3_public_endpoint_url or settings.s3_endpoint_url)
+    return _presign_client
 
 
 def ensure_bucket_exists() -> None:
@@ -70,7 +97,7 @@ def delete_object(*, key: str) -> None:
 
 
 def generate_presigned_download_url(*, key: str, filename: str, expires_in: int = 300) -> str:
-    return get_s3_client().generate_presigned_url(
+    return get_presign_client().generate_presigned_url(
         "get_object",
         Params={
             "Bucket": settings.s3_bucket,

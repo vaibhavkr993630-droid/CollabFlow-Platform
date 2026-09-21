@@ -18,6 +18,7 @@ dependencies = [
     "redis>=5.2",                # pub/sub (Phase 4) and now the Celery broker/backend
     "celery>=5.4",                # background email delivery + the daily due-soon reminder
     "boto3>=1.35",                # S3-compatible client for MinIO attachment storage
+    "sentry-sdk[fastapi]>=2.0",   # error tracking — inert unless SENTRY_DSN is set
 ]
 
 [project.optional-dependencies]

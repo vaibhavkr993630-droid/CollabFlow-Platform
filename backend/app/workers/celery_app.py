@@ -1,9 +1,25 @@
+import logging
+
 from celery import Celery
 from celery.schedules import crontab
+from celery.signals import after_setup_logger, after_setup_task_logger
 
 from app.core.config import get_settings
+from app.core.logging_config import JSONFormatter
 
 settings = get_settings()
+
+
+@after_setup_logger.connect
+@after_setup_task_logger.connect
+def _use_json_formatter(logger: logging.Logger, **_kwargs) -> None:
+    # Celery configures its own logging on worker startup and hijacks the root
+    # logger by default (worker_hijack_root_logger=True) - calling
+    # setup_logging() at import time here, the way main.py does for the API
+    # process, would just get overwritten when the worker actually starts.
+    # These two signals are Celery's documented hook for this instead.
+    for handler in logger.handlers:
+        handler.setFormatter(JSONFormatter())
 
 celery_app = Celery("collabflow", broker=settings.redis_url, backend=settings.redis_url)
 
