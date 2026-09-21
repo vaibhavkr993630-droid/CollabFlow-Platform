@@ -59,7 +59,7 @@ jobs:
 
       - name: Start MinIO
         # Not a "services:" container: those can't override the image's command,
-        # and the official minio/minio image needs `server /data` as an argument
+        # and the official MinIO image needs `server /data` as an argument
         # to actually start the server (its bare default CMD just prints usage
         # and exits) - GitHub Actions' service-container config has no field for
         # that. Starting it directly with `docker run` sidesteps the limitation.
@@ -68,7 +68,7 @@ jobs:
             -p 9000:9000 \
             -e MINIO_ROOT_USER=collabflow \
             -e MINIO_ROOT_PASSWORD=collabflow123 \
-            minio/minio:latest server /data
+            quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z server /data
           for i in $(seq 1 20); do
             curl -sf http://localhost:9000/minio/health/live && break
             sleep 1

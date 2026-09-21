@@ -527,7 +527,7 @@ Sentry, health check, presigned URLs), then the packaging around it (Docker, Com
 - **CI** (`.github/workflows/backend-ci.yml`) — on every push/PR touching `backend/**`: `ruff`,
   `alembic upgrade head` against a real Postgres, then the full `pytest` run. Postgres and Redis
   are Actions service containers; MinIO is started with a plain `docker run` because service
-  containers can't override the image's command and `minio/minio` needs `server /data` to start.
+  containers can't override the image's command and the MinIO image needs `server /data` to start.
 - **Structured JSON logging** (`app/core/logging_config.py`) for the API and — through Celery's
   `after_setup_logger` / `after_setup_task_logger` signals — the worker.
 - **Optional Sentry** (`sentry-sdk[fastapi]`), initialized only when `SENTRY_DSN` is set.
@@ -549,7 +549,7 @@ Sentry, health check, presigned URLs), then the packaging around it (Docker, Com
 - **Sentry as a config flag, not a hard dependency on an account.** The description that is true:
   integrated behind a flag, no Sentry project created yet.
 
-### Three bugs found only by running against real infrastructure
+### Four problems found only by running against real infrastructure
 
 1. **DEBUG flooded stdout with botocore internals.** With `settings.debug=True` the root logger
    went to DEBUG, which applies to every library, not just this app. Fixed by keeping root at INFO
@@ -563,6 +563,12 @@ Sentry, health check, presigned URLs), then the packaging around it (Docker, Com
    fail — it only breaks when something outside the network uses it. Fixed with the second,
    signing-only client. Verified by uploading through the containerized stack, downloading via the
    presigned URL from the host, and comparing bytes.
+4. **CI's first run failed: Docker Hub no longer serves `minio/minio`.** It had worked locally only
+   because an old copy of the image was cached on the development machine. MinIO stopped
+   publishing prebuilt images after release `2025-09-07`, and the last ones are on Quay. Fixed by
+   pinning `quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z` in Compose and CI (a pinned tag, not
+   `:latest`), then verifying from a clean state (`docker compose down -v`, fresh `up`, attachment
+   tests). This is the point of CI: it starts from nothing.
 
 ### Known simplifications
 
@@ -570,7 +576,8 @@ Sentry, health check, presigned URLs), then the packaging around it (Docker, Com
   small change worth making before real production use.
 - CI does not publish the image, and covers only the backend — the frontend's `tsc` / `oxlint` /
   build are not yet in any pipeline.
-- The credentials in `docker-compose.yml` are development defaults.
+- The credentials in `docker-compose.yml` are development defaults, and the pinned MinIO image
+  will not receive further upstream updates — acceptable for local/CI use, not for production.
 
 ### Verify
 

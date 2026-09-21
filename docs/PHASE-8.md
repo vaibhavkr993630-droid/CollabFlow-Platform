@@ -58,9 +58,9 @@ code changes, those arrive by rebuilding.
 5. `pytest -v` — the full suite, against real Postgres, Redis and MinIO.
 
 **Why MinIO isn't a service container.** Service containers can't override the image's command.
-The official `minio/minio` image needs `server /data` as an argument to start at all — with its
+The official MinIO image needs `server /data` as an argument to start at all — with its
 bare default command it just prints usage and exits. GitHub's `services:` block has no field for
-that argument, so MinIO is started directly with `docker run ... minio/minio server /data` instead.
+that argument, so MinIO is started directly with `docker run ... quay.io/minio/minio:<tag> server /data` instead.
 
 **Why `alembic upgrade head` is its own step.** The test suite builds its schema with
 `Base.metadata.create_all`, which is generated fresh from the current models on every run. That
@@ -68,6 +68,26 @@ means it can never notice a hand-written migration drifting away from the models
 reproduce. Several bugs in this project (enum name vs. value mismatches, a migration trying to
 create the same Postgres enum twice) only ever showed up when a migration ran for real, so the
 pipeline runs one.
+
+### The first CI run failed — and it was a real problem
+
+The first push of this workflow failed at "Start MinIO": GitHub's runner could not pull
+`minio/minio` (`pull access denied ... repository does not exist`). Docker Hub no longer serves that
+repository at all — neither `latest` nor an older pinned tag — and MinIO stopped publishing
+prebuilt images after release `2025-09-07`; the last ones live on Quay as
+`quay.io/minio/minio`.
+
+Nothing had failed locally because the old image was already **cached on the development machine**
+(it was 12 months old). A green local run and a red CI run, for exactly the reason CI exists: it
+starts from nothing. The fix pins the exact release on Quay in both `docker-compose.yml` and the
+workflow, rather than using `:latest` — the same lesson as the MailDev `:latest` bug from Phase 5.
+Verified from a clean state: `docker compose down -v`, a fresh `up`, the new image reporting
+healthy through the same `curl` health check, the CI step's exact `docker run` command, and the
+attachment tests against the brand-new MinIO.
+
+One caveat worth knowing: MinIO's community edition is no longer being built as an image, so a
+pinned 2025-09 release means no upstream security fixes for local/CI use. Fine for a throwaway dev
+and test dependency; it is a reason not to treat this image as production-grade.
 
 ## Structured logging
 
@@ -140,6 +160,7 @@ Not just "the tests pass" — the containerized stack was brought up and exercis
 | `docker compose start redis`, then `/health` | back to `200` |
 | Backend log lines | every one is JSON |
 | Upload a file, fetch it via the presigned URL **from the host**, `cmp` the bytes | URL host is `localhost:9000`, bytes identical |
+| `docker compose down -v` then a fresh `up`, new MinIO image | `minio` healthy, `/health` 200, attachment tests 9/9 |
 | `ruff check app tests migrations` | clean |
 | `pytest` against real Postgres, Redis, MinIO | 65 passed |
 
@@ -154,6 +175,7 @@ Not just "the tests pass" — the containerized stack was brought up and exercis
   would be the next step if deploys ever came from CI.
 - **CI covers only the backend.** The frontend's `tsc`, `oxlint` and production build are not yet
   part of any pipeline.
+- **MinIO is pinned to an image that will not receive further upstream updates** (see above).
 - **`JWT_SECRET_KEY` and the MinIO credentials in `docker-compose.yml` are development defaults.**
   Fine for a local stack; Phase 9 replaces them with real secrets set in the hosting platform.
 
