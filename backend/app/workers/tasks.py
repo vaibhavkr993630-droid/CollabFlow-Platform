@@ -6,8 +6,10 @@ from app.workers.celery_app import celery_app
 
 
 @celery_app.task(name="app.workers.tasks.send_notification_email")
-def send_notification_email(to_email: str, subject: str, body: str) -> None:
-    send_email(to_email=to_email, subject=subject, body=body)
+def send_notification_email(
+    to_email: str, subject: str, body: str, html_body: str | None = None
+) -> None:
+    send_email(to_email=to_email, subject=subject, body=body, html_body=html_body)
 
 
 @celery_app.task(name="app.workers.tasks.send_due_soon_reminders")

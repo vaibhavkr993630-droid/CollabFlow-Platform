@@ -6,7 +6,8 @@ services:
       POSTGRES_PASSWORD: collabflow
       POSTGRES_DB: collabflow
     ports:
-      - "5432:5432"
+      # Loopback only: dev-default credentials must not be reachable from other machines.
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -18,7 +19,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -28,8 +29,8 @@ services:
   maildev:
     image: maildev/maildev:2.1.0
     ports:
-      - "1080:1080" # web UI — view sent mail at http://localhost:1080
-      - "1025:1025" # SMTP — no credentials needed, catches everything
+      - "127.0.0.1:1080:1080" # web UI — view sent mail at http://localhost:1080
+      - "127.0.0.1:1025:1025" # SMTP — no credentials needed, catches everything
     # The image's own baked-in HEALTHCHECK does `wget localhost:1080`, which
     # resolves "localhost" to ::1 first and fails — the server only listens on
     # 0.0.0.0, not ::1. Cosmetic (nothing here depends on maildev being
@@ -48,8 +49,8 @@ services:
       MINIO_ROOT_USER: collabflow
       MINIO_ROOT_PASSWORD: collabflow123
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
     volumes:
       - minio_data:/data
     healthcheck:

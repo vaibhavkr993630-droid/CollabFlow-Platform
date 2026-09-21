@@ -1,6 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.email_templates import render_email
 from app.core.security import (
     InvalidTokenError,
     TokenType,
@@ -77,20 +78,26 @@ async def request_password_reset(db: AsyncSession, email: str) -> None:
 
     token = create_password_reset_token(user.id, user.hashed_password)
     link = f"{settings.frontend_url.rstrip('/')}/reset-password?token={token}"
-    body = (
-        f"Hi {user.full_name},\n\n"
-        "We received a request to reset your CollabFlow password. Open the link below to "
-        f"choose a new one. It works once and expires in {settings.password_reset_expire_minutes} "
-        "minutes:\n\n"
-        f"{link}\n\n"
-        "If you didn't ask for this, you can ignore this email — your password will not change."
+    body, html_body = render_email(
+        heading="Reset your password",
+        paragraphs=[
+            f"Hi {user.full_name},",
+            "We received a request to reset your CollabFlow password. The link works once "
+            f"and expires in {settings.password_reset_expire_minutes} minutes.",
+        ],
+        button_label="Reset password",
+        button_url=link,
+        footer="If you didn't ask for this, you can ignore this email — your password will "
+        "not change.",
     )
 
     # Imported here, not at module level: same reasoning as notification_service — the API
     # process shouldn't load Celery's app registration just to import this module.
     from app.workers.tasks import send_notification_email
 
-    send_notification_email.delay(user.email, "Reset your CollabFlow password", body)
+    send_notification_email.delay(
+        user.email, "Reset your CollabFlow password", body, html_body
+    )
 
 
 async def reset_password(db: AsyncSession, token: str, new_password: str) -> None:

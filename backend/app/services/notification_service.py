@@ -3,6 +3,8 @@ import uuid
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
+from app.core.email_templates import render_email
 from app.crud import notification as notification_crud
 from app.crud import user as user_crud
 from app.models.notification import Notification, NotificationType
@@ -61,6 +63,15 @@ async def create_and_dispatch(
         # to load at import time — this keeps that coupling one-directional.
         from app.workers.tasks import send_notification_email
 
-        send_notification_email.delay(recipient.email, title, body)
+        base_url = get_settings().frontend_url.rstrip("/")
+        link = f"{base_url}/projects/{project_id}" if project_id else base_url
+        text_body, html_body = render_email(
+            heading=title,
+            paragraphs=[body],
+            button_label="Open in CollabFlow",
+            button_url=link,
+            footer="You're getting this because of activity in CollabFlow.",
+        )
+        send_notification_email.delay(recipient.email, title, text_body, html_body)
 
     return notification

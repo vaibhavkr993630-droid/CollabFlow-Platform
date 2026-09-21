@@ -23,8 +23,8 @@ def sent_emails(monkeypatch) -> list[dict]:
     """Captures what would have been queued for Celery instead of really queueing it."""
     sent: list[dict] = []
 
-    def fake_delay(to_email: str, subject: str, body: str) -> None:
-        sent.append({"to": to_email, "subject": subject, "body": body})
+    def fake_delay(to_email: str, subject: str, body: str, html_body: str | None = None) -> None:
+        sent.append({"to": to_email, "subject": subject, "body": body, "html": html_body})
 
     monkeypatch.setattr(
         worker_tasks, "send_notification_email", SimpleNamespace(delay=fake_delay)
