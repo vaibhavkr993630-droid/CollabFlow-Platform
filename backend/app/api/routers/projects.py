@@ -54,6 +54,18 @@ async def list_projects(
     return await project_crud.list_by_workspace(db, workspace_id=workspace_id)
 
 
+@member_router.get("", response_model=ProjectRead)
+async def get_project(
+    project_id: uuid.UUID,
+    _: User = Depends(require_project_role(Role.MEMBER)),
+    db: AsyncSession = Depends(get_db),
+) -> Project:
+    project = await project_crud.get_by_id(db, project_id)
+    if project is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    return project
+
+
 @member_router.get("/members", response_model=list[ProjectMemberRead])
 async def list_project_members(
     project_id: uuid.UUID,

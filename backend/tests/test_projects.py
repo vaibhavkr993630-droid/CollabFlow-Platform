@@ -98,3 +98,25 @@ async def test_project_member_cannot_invite_but_admin_can(client: AsyncClient):
         headers=auth_headers(owner_token),
     )
     assert allowed.status_code == 201
+
+
+async def test_get_project_requires_membership(client: AsyncClient):
+    token, _ = await register_and_login(client, "owner@example.com", "Owner")
+    outsider_token, _ = await register_and_login(client, "outsider@example.com", "Outsider")
+    _, workspace_id = await create_org_and_workspace(client, token, "Acme")
+    project = (
+        await client.post(
+            f"/api/workspaces/{workspace_id}/projects",
+            json={"name": "Website Revamp"},
+            headers=auth_headers(token),
+        )
+    ).json()
+
+    ok = await client.get(f"/api/projects/{project['id']}", headers=auth_headers(token))
+    assert ok.status_code == 200
+    assert ok.json()["name"] == "Website Revamp"
+
+    forbidden = await client.get(
+        f"/api/projects/{project['id']}", headers=auth_headers(outsider_token)
+    )
+    assert forbidden.status_code == 403
