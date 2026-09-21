@@ -2,6 +2,7 @@ import uuid
 
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import set_committed_value
 
 from app.core.slugs import slugify
 from app.crud import project as project_crud
@@ -86,4 +87,7 @@ async def invite_member(
         body=f"You were added to project '{project.name}' as {role.value}.",
         project_id=project_id,
     )
+    # `user` is already in hand; attach it so the response can show who was added
+    # without a lazy load (which async SQLAlchemy forbids).
+    set_committed_value(membership, "user", user)
     return membership

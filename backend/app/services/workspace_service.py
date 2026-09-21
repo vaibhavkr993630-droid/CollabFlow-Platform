@@ -2,6 +2,7 @@ import uuid
 
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import set_committed_value
 
 from app.core.slugs import slugify
 from app.crud import organization as org_crud
@@ -61,4 +62,7 @@ async def invite_member(
         title=f"You were added to workspace '{workspace.name}'",
         body=f"You were added to workspace '{workspace.name}' as {role.value}.",
     )
+    # `user` is already in hand; attach it so the response can show who was added
+    # without a lazy load (which async SQLAlchemy forbids).
+    set_committed_value(membership, "user", user)
     return membership

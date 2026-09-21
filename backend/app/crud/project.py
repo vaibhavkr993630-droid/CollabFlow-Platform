@@ -1,6 +1,7 @@
 import uuid
 
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.project import Project, ProjectMembership
@@ -43,7 +44,9 @@ async def get_membership(
 
 async def list_members(db: AsyncSession, *, project_id: uuid.UUID) -> list[ProjectMembership]:
     result = await db.execute(
-        select(ProjectMembership).where(ProjectMembership.project_id == project_id)
+        select(ProjectMembership)
+        .options(selectinload(ProjectMembership.user))
+        .where(ProjectMembership.project_id == project_id)
     )
     return list(result.scalars().all())
 

@@ -3,6 +3,7 @@ import uuid
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from app.models.roles import Role
+from app.schemas.user import UserBrief
 
 
 class ProjectCreate(BaseModel):
@@ -31,6 +32,7 @@ class ProjectMemberRead(BaseModel):
     id: uuid.UUID
     user_id: uuid.UUID
     role: Role
+    user: UserBrief
 
 
 class PresenceRead(BaseModel):

@@ -47,6 +47,8 @@ async def test_create_workspace_and_list_members(client: AsyncClient):
     members = members_resp.json()
     assert len(members) == 1
     assert members[0]["role"] == "owner"
+    # Members carry the user's name/email so the UI never has to show raw ids.
+    assert members[0]["user"]["email"] == "owner@example.com"
 
 
 async def test_non_member_cannot_list_workspace_members(client: AsyncClient):
@@ -99,6 +101,7 @@ async def test_member_cannot_invite_but_admin_can(client: AsyncClient):
         headers=owner_headers,
     )
     assert add_resp.status_code == 201
+    assert add_resp.json()["user"]["full_name"] == "Member"
 
     # A plain member cannot invite others.
     member_headers = {"Authorization": f"Bearer {member_token}"}

@@ -1,6 +1,7 @@
 import uuid
 
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.roles import Role
@@ -43,7 +44,9 @@ async def get_membership(
 
 async def list_members(db: AsyncSession, *, workspace_id: uuid.UUID) -> list[WorkspaceMembership]:
     result = await db.execute(
-        select(WorkspaceMembership).where(WorkspaceMembership.workspace_id == workspace_id)
+        select(WorkspaceMembership)
+        .options(selectinload(WorkspaceMembership.user))
+        .where(WorkspaceMembership.workspace_id == workspace_id)
     )
     return list(result.scalars().all())
 

@@ -24,6 +24,9 @@ async def test_create_project_seeds_creator_as_owner(client: AsyncClient):
     )
     assert members.status_code == 200
     assert members.json()[0]["role"] == "owner"
+    # Members carry the user's name/email so the UI never has to show raw ids.
+    assert members.json()[0]["user"]["email"] == "owner@example.com"
+    assert members.json()[0]["user"]["full_name"] == "Owner"
 
 
 async def test_workspace_outsider_cannot_create_project(client: AsyncClient):
@@ -80,6 +83,7 @@ async def test_project_member_cannot_invite_but_admin_can(client: AsyncClient):
         headers=auth_headers(owner_token),
     )
     assert add_resp.status_code == 201
+    assert add_resp.json()["user"]["email"] == "member@example.com"
 
     forbidden = await client.post(
         f"/api/projects/{project_id}/members",
