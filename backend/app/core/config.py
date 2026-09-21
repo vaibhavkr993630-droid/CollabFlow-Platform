@@ -31,10 +31,15 @@ class Settings(BaseSettings):
     # Redis
     redis_url: str = "redis://localhost:6379/0"
 
-    # Email (Celery worker; MailDev in local dev — see docker-compose.yml)
+    # Email (Celery worker; MailDev in local dev — see docker-compose.yml).
+    # smtp_user/smtp_password unset (the default) means no auth and no STARTTLS
+    # — correct for MailDev, which doesn't speak either. A real provider (Resend,
+    # etc.) needs both set, which also switches send_email() into STARTTLS mode.
     smtp_host: str = "localhost"
     smtp_port: int = 1025
     smtp_from: str = "noreply@collabflow.local"
+    smtp_user: str | None = None
+    smtp_password: str | None = None
 
     # File storage (MinIO locally, any S3-compatible endpoint in production).
     # s3_endpoint_url is what the backend itself uses to talk to the bucket

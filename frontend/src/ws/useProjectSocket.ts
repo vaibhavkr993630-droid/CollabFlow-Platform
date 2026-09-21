@@ -3,11 +3,7 @@ import { useCallback } from 'react'
 import { tokenStore } from '../api/tokenStore'
 import { useWebSocket, type WSStatus } from './useWebSocket'
 import type { ProjectWSEvent } from './events'
-
-function wsBaseUrl(): string {
-  const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
-  return `${protocol}://${window.location.host}`
-}
+import { wsBaseUrl } from './wsBaseUrl'
 
 export function useProjectSocket(
   projectId: string | null,
