@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 
 import * as orgApi from '../api/organizations'
 import * as projectApi from '../api/projects'
+import { AboutSection } from '../components/AboutSection'
 import { Layout } from '../components/Layout'
 import { MembersPanel } from '../components/MembersPanel'
 import { errorMessage } from '../lib/format'
@@ -159,6 +160,8 @@ export default function DashboardPage() {
           {errorMessage(createOrg.error ?? createWorkspace.error ?? createProject.error)}
         </p>
       )}
+
+      {!workspaceId && <AboutSection />}
 
       {workspaceId && (
         <section className="mt-6 rounded-xl border border-gray-200 bg-white p-4">
