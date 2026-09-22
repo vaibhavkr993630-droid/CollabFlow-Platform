@@ -12,6 +12,10 @@ dist
 dist-ssr
 *.local
 
+# Local Vercel project link (created by `vercel link`/`vercel deploy`) — a
+# project/org id, not a secret, but it's per-machine linkage state, not code.
+.vercel
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
