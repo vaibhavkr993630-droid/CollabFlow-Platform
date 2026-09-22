@@ -11,7 +11,7 @@ export function Layout({ children }: { children: ReactNode }) {
     <div className="min-h-screen bg-gray-50">
       <header className="sticky top-0 z-10 border-b border-gray-200 bg-white">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
-          <Link to="/" className="text-lg font-semibold text-gray-900">
+          <Link to="/" className="text-lg font-bold text-brand-600">
             CollabFlow
           </Link>
           <div className="flex items-center gap-3">
@@ -20,7 +20,7 @@ export function Layout({ children }: { children: ReactNode }) {
             <button
               type="button"
               onClick={logout}
-              className="rounded-lg px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100"
+              className="rounded-full border border-brand-600 px-3 py-1.5 text-sm font-medium text-brand-600 hover:bg-brand-600 hover:text-white"
             >
               Log out
             </button>

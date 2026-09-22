@@ -187,7 +187,7 @@ export default function DashboardPage() {
 function Column({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-4">
-      <h2 className="mb-3 text-sm font-semibold text-gray-500 uppercase">{title}</h2>
+      <h2 className="mb-3 text-sm font-semibold text-gray-900 uppercase">{title}</h2>
       <div className="space-y-1">{children}</div>
     </div>
   )
