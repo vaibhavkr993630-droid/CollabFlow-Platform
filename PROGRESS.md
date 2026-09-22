@@ -594,5 +594,72 @@ through its presigned URL from the host matched byte for byte.
 
 ### Next
 
-**Phase 9 — Deployment:** the hosted infrastructure described as code, real secrets replacing the
-development defaults, real SMTP, and the frontend deployed as a static build.
+**Phase 9 — Frontend completeness:** close the gap between what the API can do and what the UI
+exposes, so the live demo shows the real system.
+
+
+---
+
+## Phase 9 — Closing the frontend gaps ✅
+
+**Goal:** the API had grown well past the UI. Seven `api/*.ts` helpers existed that no screen
+called, and the practical result was that **two people could not be connected through the UI at
+all** — no way to invite anyone, roles invisible, no way to assign a task. Full report:
+[`docs/PHASE-9.md`](docs/PHASE-9.md).
+
+### Delivered
+
+- **Members and roles** — one `MembersPanel` serving both workspaces and projects: member list
+  with avatars and role badges, plus invite-by-email with a role picker for owners/admins.
+- **Assignees** — dropdown in the task panel, initials avatar on the card. This also makes the
+  "task assigned" notification reachable from the UI for the first time.
+- **Subtasks** (create, tick off, `n/m done`), **label creation**, and a paginated **project
+  activity feed**.
+- **Search / filter / sort** on the board, finally driving the query parameters Phase 3 built.
+- **`GET /api/projects/{id}`** so the board can show the project's own name.
+- **HTML email** — `multipart/alternative` with a real button; plain text was why the reset link
+  was not clickable. All interpolated text escaped.
+- **Polish** — real page title and favicon (it was literally "frontend"), empty states, readable
+  error messages, a 390px-wide check.
+- **Loopback binding** for Postgres, Redis, MinIO and MailDev in Compose.
+
+### Decisions
+
+- **Embed a `UserBrief` in membership responses** rather than having the UI resolve ids. The list
+  queries eager-load with `selectinload`; the invite path attaches the already-loaded user with
+  `set_committed_value`, because async SQLAlchemy raises on a lazy load rather than silently
+  issuing a query.
+- **Explain the 403 instead of hiding it.** Workspace and project membership are independent by
+  design. A workspace member opening a project they are not in now gets a sentence saying so,
+  rather than a dead screen.
+- **Filters live in the React Query cache key**, so each combination caches independently, while
+  live-update handlers invalidate by the `['tasks', projectId]` prefix and refresh all of them.
+- **Escape everything in HTML mail.** Names and task titles are user-controlled; a test asserts a
+  user called `Mail <b>Test</b>` arrives escaped.
+
+### Found while porting the deployment config
+
+- `.railway/railway.ts` still pointed at the **deleted** `collabflow` repository and at the Docker
+  Hub MinIO image that is no longer served. Both fixed.
+- `FRONTEND_URL` was never set in the production environment. Unset, it defaults to
+  `http://localhost:5173` — every password-reset email sent from production would have been a
+  dead link.
+
+### Verify
+
+```bash
+cd backend && ruff check app tests migrations && pytest      # lint clean, suite green
+cd frontend && npx tsc -b && npx vite build                  # typecheck + build clean
+```
+
+Verified in a real headless browser against the real Docker stack with three accounts: invites
+(including the "no user with that email" path), role badges, a plain member seeing no invite form,
+assignee avatars, label and subtask creation, named comment authors, each filter narrowing the
+board, the activity feed, **two browsers receiving the same task live over the WebSocket**, a
+non-member getting the explanatory page, and the reset email rendering with a working button.
+
+### Next
+
+**Phase 10 — Deployment:** re-point the Railway services at this repository (their source is the
+deleted `collabflow` repo, so the running containers still serve traffic but nothing can
+redeploy), deploy the new backend, and publish the frontend to the existing Vercel project.

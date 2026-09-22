@@ -8,7 +8,7 @@
 <p align="center">
   <a href="https://github.com/vaibhavkr993630-droid/CollabFlow-Platform/actions/workflows/backend-ci.yml"><img alt="Backend CI" src="https://github.com/vaibhavkr993630-droid/CollabFlow-Platform/actions/workflows/backend-ci.yml/badge.svg"></a>
   <img alt="Status" src="https://img.shields.io/badge/status-in%20development-blue">
-  <img alt="Phase" src="https://img.shields.io/badge/phase-8%20of%209%20%E2%80%94%20hardening-brightgreen">
+  <img alt="Phase" src="https://img.shields.io/badge/phase-9%20%E2%80%94%20frontend%20complete-brightgreen">
   <img alt="Backend" src="https://img.shields.io/badge/backend-FastAPI%20%2B%20async%20SQLAlchemy-009688">
   <img alt="Python" src="https://img.shields.io/badge/python-3.12%2B-3776AB">
   <img alt="License" src="https://img.shields.io/badge/license-MIT-black">
@@ -106,6 +106,7 @@ POST   /api/organizations                           GET  /api/organizations
 POST   /api/organizations/{org_id}/workspaces        GET  .../workspaces
 GET/POST  /api/workspaces/{workspace_id}/members
 POST   /api/workspaces/{workspace_id}/projects        GET  .../projects
+GET    /api/projects/{project_id}
 GET/POST  /api/projects/{project_id}/members
 POST   /api/projects/{project_id}/tasks
 GET    /api/projects/{project_id}/tasks?status=&priority=&assignee_id=&label_id=
@@ -155,6 +156,19 @@ Windows-mounted drive, Vite's native file watcher may not pick up edits reliably
 already sets `server.watch.usePolling` for this reason — see [`docs/PHASE-7.md`](docs/PHASE-7.md)
 for how this was discovered). If HMR ever seems to silently stop working, that's the first thing
 to suspect.
+
+### What the UI covers
+
+Organizations, workspaces and projects; a drag-and-drop Kanban board with live updates and
+presence; task detail with description, status, priority, due date, **assignee**, labels,
+**subtasks**, attachments and comments; **workspace and project members with role badges and
+invite-by-email**; a **project activity feed**; notifications; and **search / filter / sort**
+across the board.
+
+Known gaps, all of them missing backend endpoints rather than missing screens: no renaming or
+deleting an org/workspace/project, no changing a role or removing a member, no editing or
+deleting a comment, and invites require the person to already have an account. See
+[`docs/PHASE-9.md`](docs/PHASE-9.md).
 
 ## File attachments
 
@@ -276,7 +290,8 @@ CI (`.github/workflows/backend-ci.yml`) runs exactly this on every push or pull 
 | **6** | File attachments on tasks (S3-compatible storage, presigned downloads) | ✅ **Done** |
 | **7** | Frontend — React 19 + TypeScript, boards, real-time client | ✅ **Done** |
 | **8** | Hardening — Docker Compose stack, structured logging, CI, health checks | ✅ **Done** |
-| 9 | Deployment — managed Postgres/Redis/object storage + hosted frontend | ⏳ Planned |
+| **9** | Frontend completeness — members & roles, assignees, subtasks, label creation, search/filter/sort, activity feed, HTML email | ✅ **Done** |
+| 10 | Deployment — managed Postgres/Redis/object storage + hosted frontend | ⏳ In progress |
 
 ## Repository layout
 
@@ -295,7 +310,10 @@ frontend/
     api/                 # typed wrappers over the backend REST API
     auth/                 # AuthContext, ProtectedRoute
     ws/                    # WebSocket client (reconnect/backoff)
-    pages/, components/    # dashboard, Kanban board, task detail, notifications
+    pages/, components/    # dashboard, Kanban board, task detail, members, activity
+    lib/, hooks/           # formatting/error helpers, shared queries
+  vercel.json            # SPA rewrite for client-side routes
+.railway/railway.ts      # Railway infrastructure-as-code
 docker-compose.yml       # Postgres, Redis, MailDev, MinIO + API, worker, beat, one-shot migrate
 docs/                    # per-phase reports
 PROGRESS.md              # running phase log
