@@ -10,10 +10,9 @@ export default defineRailway(() => {
   const minioVolume = volume("minio-volume", { allowOnlineResize: true, region: "ams", sizeMB: 500 });
 
   const minio = service("minio", {
-    // Pinned, and from Quay: Docker Hub's minio/minio is no longer served
-    // (the same reason docker-compose.yml changed), and MinIO stopped
-    // publishing images after this release.
-    source: image("quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z"),
+    // Chainguard's free build of MinIO, as in docker-compose.yml: MinIO's own
+    // images are no longer publicly downloadable.
+    source: image("cgr.dev/chainguard/minio:latest"),
     replicas: { ams: 1 },
     volumeMounts: { "/data": minioVolume },
     env: { MINIO_ROOT_PASSWORD: preserve(), MINIO_ROOT_USER: preserve() },
