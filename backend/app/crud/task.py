@@ -1,9 +1,11 @@
 import uuid
 from datetime import date
 
-from sqlalchemy import func, select
+from sqlalchemy import ColumnElement, exists, func, literal_column, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
+from app.models.comment import Comment
 from app.models.label import task_labels
 from app.models.task import SortOrder, Task, TaskPriority, TaskSortField, TaskStatus
 
@@ -15,6 +17,61 @@ _SORT_COLUMNS = {
     TaskSortField.POSITION: Task.position,
     TaskSortField.TITLE: Task.title,
 }
+
+# Search uses Postgres full-text search with the 'english' configuration, so word forms
+# match ("deploying" finds "deploy"). _comment_document must stay identical to the GIN
+# index in migration a7c3e9d41b20, otherwise Postgres cannot use it. Literal SQL (not
+# bound parameters) keeps the expressions equal.
+_TS_CONFIG = literal_column("'english'")
+
+
+def _task_document(task) -> ColumnElement:
+    text = task.title.op("||")(literal_column("' '")).op("||")(
+        func.coalesce(task.description, literal_column("''"))
+    )
+    return func.to_tsvector(_TS_CONFIG, text)
+
+
+def _comment_document(comment) -> ColumnElement:
+    return func.to_tsvector(_TS_CONFIG, comment.body)
+
+
+def _escape_like(value: str) -> str:
+    """Makes % and _ literal characters instead of wildcards."""
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _search_condition(search: str) -> ColumnElement:
+    """
+    A top-level task matches when any of these matches the search text:
+    its title (substring, as before), its title or description (full-text),
+    one of its comments, one of its subtasks, or a comment on one of its subtasks.
+    The board lists top-level tasks only, so subtask and comment hits surface their parent.
+    """
+    query = func.websearch_to_tsquery(_TS_CONFIG, search)
+    subtask = aliased(Task)
+    comment_on_task = exists().where(
+        Comment.task_id == Task.id, _comment_document(Comment).op("@@")(query)
+    )
+    subtask_matches = exists().where(
+        subtask.parent_task_id == Task.id,
+        or_(
+            _task_document(subtask).op("@@")(query),
+            subtask.title.ilike(f"%{_escape_like(search)}%", escape="\\"),
+        ),
+    )
+    comment_on_subtask = (
+        exists()
+        .where(subtask.parent_task_id == Task.id, Comment.task_id == subtask.id)
+        .where(_comment_document(Comment).op("@@")(query))
+    )
+    return or_(
+        Task.title.ilike(f"%{_escape_like(search)}%", escape="\\"),
+        _task_document(Task).op("@@")(query),
+        comment_on_task,
+        subtask_matches,
+        comment_on_subtask,
+    )
 
 
 async def get_by_id(db: AsyncSession, task_id: uuid.UUID) -> Task | None:
@@ -79,8 +136,8 @@ async def list_by_project(
         conditions.append(Task.priority == priority)
     if assignee_id is not None:
         conditions.append(Task.assignee_id == assignee_id)
-    if search is not None:
-        conditions.append(Task.title.ilike(f"%{search}%"))
+    if search is not None and search.strip():
+        conditions.append(_search_condition(search.strip()))
 
     base_query = select(Task).where(*conditions)
     count_query = select(func.count(func.distinct(Task.id))).where(*conditions)
