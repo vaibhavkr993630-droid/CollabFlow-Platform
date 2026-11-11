@@ -19,6 +19,7 @@ dependencies = [
     "celery>=5.4",                # background email delivery + the daily due-soon reminder
     "boto3>=1.35",                # S3-compatible client for MinIO attachment storage
     "sentry-sdk[fastapi]>=2.0",   # error tracking — inert unless SENTRY_DSN is set
+    "httpx>=0.27",                # outbound HTTP to the text assistant provider
 ]
 
 [project.optional-dependencies]

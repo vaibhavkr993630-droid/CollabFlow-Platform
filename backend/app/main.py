@@ -16,6 +16,7 @@ from app.api.routers import (
     attachments,
     auth,
     comments,
+    features,
     labels,
     notifications,
     organizations,
@@ -104,6 +105,7 @@ app.include_router(activity.project_router)
 app.include_router(activity.task_router)
 app.include_router(notifications.router)
 app.include_router(attachments.router)
+app.include_router(features.router)
 app.include_router(ws.router)
 app.include_router(ws.notifications_router)
 

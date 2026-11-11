@@ -61,6 +61,18 @@ class Settings(BaseSettings):
     # runs identically either way. Only set this once you have a Sentry project.
     sentry_dsn: str | None = None
 
+    # Text assistant (summaries, task extraction, project Q&A). Any provider with an
+    # OpenAI-compatible /chat/completions endpoint works; the default is Google's free tier.
+    # Unset key (the default) turns every assistant feature off and hides it in the UI.
+    # Other free options: Groq (https://api.groq.com/openai/v1) or a local Ollama server
+    # (http://localhost:11434/v1, any non-empty key).
+    assistant_api_key: str | None = None
+    assistant_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai"
+    assistant_model: str = "gemini-3.5-flash"
+    assistant_timeout_seconds: float = 30.0
+    # Requests per user per UTC day. Protects the provider's free quota, since sign-up is open.
+    assistant_daily_limit: int = 30
+
     # CORS
     cors_origins: list[str] = ["http://localhost:5173"]
 
