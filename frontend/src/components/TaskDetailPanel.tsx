@@ -10,6 +10,7 @@ import { useAuth } from '../auth/AuthContext'
 import { errorMessage, prettySummary, timeAgo } from '../lib/format'
 import type { ProjectMember, Task, TaskPriority, TaskStatus } from '../types'
 import { Avatar } from './Avatar'
+import { ThreadSummary } from './ThreadSummary'
 
 const STATUS_OPTIONS: TaskStatus[] = ['todo', 'in_progress', 'in_review', 'done']
 const PRIORITY_OPTIONS: TaskPriority[] = ['low', 'medium', 'high', 'urgent']
@@ -442,6 +443,11 @@ export function TaskDetailPanel({
               <h3 className="mb-2 text-xs font-semibold tracking-wide text-gray-500 uppercase">
                 Comments
               </h3>
+              <ThreadSummary
+                key={commentsQuery.data?.length ?? 0}
+                taskId={taskId}
+                commentCount={commentsQuery.data?.length ?? 0}
+              />
               <div className="space-y-3">
                 {commentsQuery.data?.length === 0 && (
                   <p className="text-xs text-gray-400">No comments yet. Start the conversation.</p>

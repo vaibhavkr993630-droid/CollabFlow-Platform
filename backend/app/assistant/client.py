@@ -30,12 +30,14 @@ class ChatCompletionsClient:
         api_key: str,
         model: str,
         timeout_seconds: float,
+        reasoning_effort: str | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self._url = f"{base_url.rstrip('/')}/chat/completions"
         self._api_key = api_key
         self._model = model
         self._timeout = timeout_seconds
+        self._reasoning_effort = reasoning_effort
         self._transport = transport  # tests pass httpx.MockTransport; None means real network
 
     async def complete(self, *, system: str, prompt: str, max_tokens: int = 1024) -> str:
@@ -47,6 +49,8 @@ class ChatCompletionsClient:
             ],
             "max_tokens": max_tokens,
         }
+        if self._reasoning_effort:
+            payload["reasoning_effort"] = self._reasoning_effort
         try:
             async with httpx.AsyncClient(
                 timeout=self._timeout, transport=self._transport
@@ -72,9 +76,14 @@ class ChatCompletionsClient:
             raise AssistantUnavailableError("The assistant returned an error.")
 
         try:
-            text = response.json()["choices"][0]["message"]["content"]
+            choice = response.json()["choices"][0]
+            text = choice["message"]["content"]
         except (ValueError, KeyError, IndexError, TypeError) as exc:
             raise AssistantUnavailableError("The assistant sent an unexpected reply.") from exc
+        if choice.get("finish_reason") == "length":
+            # Models that think before answering spend part of max_tokens on hidden reasoning.
+            # A cut-off reply must never be shown or cached as if it were complete.
+            raise AssistantUnavailableError("The assistant's reply was cut off. Try again.")
         if not text or not text.strip():
             raise AssistantUnavailableError("The assistant returned an empty reply.")
         return text.strip()

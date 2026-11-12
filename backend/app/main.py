@@ -21,6 +21,7 @@ from app.api.routers import (
     notifications,
     organizations,
     projects,
+    summaries,
     tasks,
     workspaces,
     ws,
@@ -101,6 +102,7 @@ app.include_router(tasks.project_router)
 app.include_router(tasks.task_router)
 app.include_router(labels.router)
 app.include_router(comments.router)
+app.include_router(summaries.router)
 app.include_router(activity.project_router)
 app.include_router(activity.task_router)
 app.include_router(notifications.router)

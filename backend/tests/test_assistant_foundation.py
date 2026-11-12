@@ -100,6 +100,41 @@ async def test_client_turns_bad_replies_into_unavailable(response: httpx.Respons
         await _client(lambda _request: response).complete(system="s", prompt="p")
 
 
+async def test_client_refuses_a_cut_off_reply():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "choices": [{"message": {"content": "Summary: half a"}, "finish_reason": "length"}]
+            },
+        )
+
+    with pytest.raises(AssistantUnavailableError):
+        await _client(handler).complete(system="s", prompt="p")
+
+
+async def test_client_sends_reasoning_effort_only_when_set():
+    bodies = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        bodies.append(json.loads(request.content))
+        return _reply("ok")
+
+    await _client(handler).complete(system="s", prompt="p")
+    with_effort = ChatCompletionsClient(
+        base_url="https://provider.test/v1",
+        api_key="k",
+        model="m",
+        timeout_seconds=5,
+        reasoning_effort="low",
+        transport=httpx.MockTransport(handler),
+    )
+    await with_effort.complete(system="s", prompt="p")
+
+    assert "reasoning_effort" not in bodies[0]
+    assert bodies[1]["reasoning_effort"] == "low"
+
+
 async def test_client_turns_network_failure_into_unavailable():
     def handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("no route", request=request)

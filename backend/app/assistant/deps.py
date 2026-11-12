@@ -24,6 +24,7 @@ def get_assistant_client() -> AssistantClient | None:
         api_key=settings.assistant_api_key,
         model=settings.assistant_model,
         timeout_seconds=settings.assistant_timeout_seconds,
+        reasoning_effort=settings.assistant_reasoning_effort or None,
     )
 
 
