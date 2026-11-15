@@ -69,6 +69,8 @@ class Settings(BaseSettings):
     assistant_api_key: str | None = None
     assistant_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai"
     assistant_model: str = "gemini-3.5-flash"
+    # Tried once when the main model is busy, rate-limited or too slow. Empty disables it.
+    assistant_fallback_model: str | None = "gemini-3.1-flash-lite"
     assistant_timeout_seconds: float = 30.0
     # How hard the model "thinks" before answering. "low" is ~3x faster and cheaper on quota for
     # summaries without losing accuracy (measured). Leave empty for providers without the option.

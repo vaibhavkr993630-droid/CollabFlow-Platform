@@ -22,6 +22,7 @@ from app.api.routers import (
     organizations,
     projects,
     summaries,
+    task_drafts,
     tasks,
     workspaces,
     ws,
@@ -100,6 +101,7 @@ app.include_router(projects.router)
 app.include_router(projects.member_router)
 app.include_router(tasks.project_router)
 app.include_router(tasks.task_router)
+app.include_router(task_drafts.router)
 app.include_router(labels.router)
 app.include_router(comments.router)
 app.include_router(summaries.router)

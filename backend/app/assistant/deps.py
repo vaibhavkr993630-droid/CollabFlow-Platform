@@ -23,6 +23,7 @@ def get_assistant_client() -> AssistantClient | None:
         base_url=settings.assistant_base_url,
         api_key=settings.assistant_api_key,
         model=settings.assistant_model,
+        fallback_model=settings.assistant_fallback_model or None,
         timeout_seconds=settings.assistant_timeout_seconds,
         reasoning_effort=settings.assistant_reasoning_effort or None,
     )

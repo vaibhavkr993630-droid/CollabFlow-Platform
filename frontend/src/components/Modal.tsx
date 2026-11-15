@@ -4,10 +4,13 @@ export function Modal({
   title,
   onClose,
   children,
+  wide = false,
 }: {
   title: string
   onClose: () => void
   children: ReactNode
+  /** Wider dialog for content with several fields per row. */
+  wide?: boolean
 }) {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -25,7 +28,7 @@ export function Modal({
       <div
         role="dialog"
         aria-label={title}
-        className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-xl bg-white p-5 shadow-xl"
+        className={`max-h-[85vh] w-full ${wide ? 'max-w-2xl' : 'max-w-md'} overflow-y-auto rounded-xl bg-white p-5 shadow-xl`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-3 flex items-center justify-between">

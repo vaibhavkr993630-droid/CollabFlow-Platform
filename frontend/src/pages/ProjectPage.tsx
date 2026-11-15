@@ -13,7 +13,9 @@ import { KanbanBoard } from '../components/KanbanBoard'
 import { Layout } from '../components/Layout'
 import { MembersPanel } from '../components/MembersPanel'
 import { Modal } from '../components/Modal'
+import { NotesToTasks } from '../components/NotesToTasks'
 import { TaskDetailPanel } from '../components/TaskDetailPanel'
+import { useFeatures } from '../hooks/useFeatures'
 import { useProjectMembers } from '../hooks/useProjectMembers'
 import { EMPTY_FILTERS, type BoardFilterState } from '../lib/boardFilters'
 import { errorMessage } from '../lib/format'
@@ -31,6 +33,8 @@ export default function ProjectPage() {
   const [filters, setFilters] = useState<BoardFilterState>(EMPTY_FILTERS)
   const [showMembers, setShowMembers] = useState(false)
   const [showActivity, setShowActivity] = useState(false)
+  const [showNotes, setShowNotes] = useState(false)
+  const features = useFeatures()
 
   const { members, byUserId, isLoading: membersLoading } = useProjectMembers(projectId)
   const assigneeNames = new Map(members.map((m) => [m.user_id, m.user.full_name]))
@@ -240,6 +244,15 @@ export default function ProjectPage() {
           >
             Activity
           </button>
+          {features.assistant && (
+            <button
+              type="button"
+              onClick={() => setShowNotes(true)}
+              className="rounded-lg border border-brand-100 bg-brand-50 px-3 py-1.5 text-sm text-brand-700 hover:bg-brand-100"
+            >
+              Add tasks from notes
+            </button>
+          )}
         </div>
       </div>
 
@@ -314,6 +327,16 @@ export default function ProjectPage() {
             members={members}
             isLoading={membersLoading}
             onInvite={(email, role) => inviteMutation.mutateAsync({ email, role })}
+          />
+        </Modal>
+      )}
+
+      {showNotes && (
+        <Modal title="Add tasks from notes" onClose={() => setShowNotes(false)} wide>
+          <NotesToTasks
+            projectId={projectId}
+            members={members}
+            onDone={() => setShowNotes(false)}
           />
         </Modal>
       )}

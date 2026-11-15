@@ -13,8 +13,12 @@ class FakeAssistantClient:
     fail: bool = False
     calls: list[dict] = field(default_factory=list)
 
-    async def complete(self, *, system: str, prompt: str, max_tokens: int = 1024) -> str:
-        self.calls.append({"system": system, "prompt": prompt, "max_tokens": max_tokens})
+    async def complete(
+        self, *, system: str, prompt: str, max_tokens: int = 1024, json_mode: bool = False
+    ) -> str:
+        self.calls.append(
+            {"system": system, "prompt": prompt, "max_tokens": max_tokens, "json_mode": json_mode}
+        )
         if self.fail:
             raise AssistantUnavailableError("The assistant could not be reached.")
         return self.reply

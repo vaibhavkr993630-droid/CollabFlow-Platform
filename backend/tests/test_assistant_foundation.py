@@ -135,6 +135,20 @@ async def test_client_sends_reasoning_effort_only_when_set():
     assert bodies[1]["reasoning_effort"] == "low"
 
 
+async def test_client_asks_for_json_only_when_requested():
+    bodies = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        bodies.append(json.loads(request.content))
+        return _reply("{}")
+
+    await _client(handler).complete(system="s", prompt="p")
+    await _client(handler).complete(system="s", prompt="p", json_mode=True)
+
+    assert "response_format" not in bodies[0]
+    assert bodies[1]["response_format"] == {"type": "json_object"}
+
+
 async def test_client_turns_network_failure_into_unavailable():
     def handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("no route", request=request)
@@ -170,3 +184,66 @@ async def test_daily_limit_blocks_after_limit_per_user(monkeypatch: pytest.Monke
         for user in (alice, bob):
             for key in await redis.keys(f"assistant:usage:{user.id}:*"):
                 await redis.delete(key)
+
+
+# --- backup model ----------------------------------------------------------------------
+
+
+def _client_with_backup(handler) -> ChatCompletionsClient:
+    return ChatCompletionsClient(
+        base_url="https://provider.test/v1",
+        api_key="k",
+        model="main-model",
+        fallback_model="backup-model",
+        timeout_seconds=5,
+        transport=httpx.MockTransport(handler),
+    )
+
+
+@pytest.mark.parametrize(
+    "main_failure",
+    [
+        httpx.Response(503, json={"error": "high demand"}),
+        httpx.Response(429, json={"error": "rate limit"}),
+        "timeout",
+    ],
+    ids=["busy", "rate-limited", "timeout"],
+)
+async def test_backup_model_answers_when_main_model_is_unavailable(main_failure):
+    models = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        model = json.loads(request.content)["model"]
+        models.append(model)
+        if model == "main-model":
+            if main_failure == "timeout":
+                raise httpx.ReadTimeout("slow", request=request)
+            return main_failure
+        return _reply("from the backup")
+
+    text = await _client_with_backup(handler).complete(system="s", prompt="p")
+
+    assert text == "from the backup"
+    assert models == ["main-model", "backup-model"]
+
+
+async def test_backup_model_is_not_used_for_errors_a_retry_cannot_fix():
+    models = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        models.append(json.loads(request.content)["model"])
+        return httpx.Response(400, json={"error": "bad request"})
+
+    with pytest.raises(AssistantUnavailableError):
+        await _client_with_backup(handler).complete(system="s", prompt="p")
+    assert models == ["main-model"]
+
+
+async def test_both_models_failing_gives_the_last_reason():
+    def handler(request: httpx.Request) -> httpx.Response:
+        if json.loads(request.content)["model"] == "main-model":
+            return httpx.Response(503)
+        return httpx.Response(429)
+
+    with pytest.raises(AssistantUnavailableError, match="free quota"):
+        await _client_with_backup(handler).complete(system="s", prompt="p")
