@@ -3,6 +3,7 @@ from collections.abc import AsyncGenerator, Generator
 import pytest
 from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
@@ -41,6 +42,8 @@ def _ensure_bucket() -> None:
 @pytest.fixture(autouse=True)
 async def _reset_schema() -> AsyncGenerator[None, None]:
     async with engine.begin() as conn:
+        # search_documents uses the pgvector column type (CI and Compose run pgvector/pgvector).
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
     yield

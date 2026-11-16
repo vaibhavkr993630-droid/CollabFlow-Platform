@@ -6,6 +6,7 @@ from app.models.notification import Notification, NotificationType
 from app.models.organization import Organization
 from app.models.project import Project, ProjectMembership
 from app.models.roles import Role
+from app.models.search_document import SearchDocument
 from app.models.task import Task, TaskPriority, TaskStatus
 from app.models.user import User
 from app.models.workspace import Workspace, WorkspaceMembership
@@ -22,6 +23,7 @@ __all__ = [
     "Project",
     "ProjectMembership",
     "Role",
+    "SearchDocument",
     "Task",
     "TaskPriority",
     "TaskStatus",

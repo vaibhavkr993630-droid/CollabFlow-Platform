@@ -9,6 +9,7 @@ from app.crud import attachment as attachment_crud
 from app.crud import label as label_crud
 from app.crud import project as project_crud
 from app.crud import task as task_crud
+from app.assistant.indexing_queue import queue_task_indexing
 from app.models.activity import ActivityAction
 from app.models.notification import NotificationType
 from app.models.task import Task, TaskPriority, TaskStatus
@@ -84,6 +85,7 @@ async def create_task(
     await db.commit()
     await db.refresh(task)
 
+    queue_task_indexing(task.id)
     await publish_event(
         redis,
         project_id=project_id,
@@ -155,6 +157,8 @@ async def update_task(
     await db.commit()
     await db.refresh(task)
 
+    if "title" in changes or "description" in changes:
+        queue_task_indexing(task.id)
     if changes:
         await publish_event(
             redis,

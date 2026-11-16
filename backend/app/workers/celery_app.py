@@ -41,4 +41,9 @@ celery_app.conf.beat_schedule = {
         "task": "app.workers.tasks.send_due_soon_reminders",
         "schedule": crontab(hour=8, minute=0),
     },
+    # Catch-up for searchable task/comment copies (see app/assistant/indexing.py).
+    "reindex-search-documents": {
+        "task": "app.workers.tasks.reindex_search_documents",
+        "schedule": crontab(minute=15),
+    },
 }

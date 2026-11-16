@@ -1,4 +1,5 @@
 import asyncio
+import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import date, timedelta
@@ -78,3 +79,50 @@ async def _send_due_soon_reminders_async() -> None:
                 project_id=task.project_id,
                 task_id=task.id,
             )
+
+
+# --- searchable copies of task and comment text --------------------------------------------
+
+
+async def _run_indexing(work) -> int:
+    """Shared wrapper: skips quietly when the feature is off or the database has no pgvector."""
+    from app.assistant import indexing
+    from app.assistant.deps import get_assistant_client
+
+    client = get_assistant_client()
+    if client is None:
+        return 0
+    async with job_resources() as (session_factory, _redis), session_factory() as db:
+        if not await indexing.is_ready(db):
+            return 0
+        return await work(indexing, db, client)
+
+
+@celery_app.task(
+    name="app.workers.tasks.index_task_text",
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    max_retries=3,
+)
+def index_task_text(task_id: str) -> int:
+    return asyncio.run(
+        _run_indexing(lambda ix, db, client: ix.index_task(db, client, uuid.UUID(task_id)))
+    )
+
+
+@celery_app.task(
+    name="app.workers.tasks.index_comment_text",
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    max_retries=3,
+)
+def index_comment_text(comment_id: str) -> int:
+    return asyncio.run(
+        _run_indexing(lambda ix, db, client: ix.index_comment(db, client, uuid.UUID(comment_id)))
+    )
+
+
+@celery_app.task(name="app.workers.tasks.reindex_search_documents")
+def reindex_search_documents() -> int:
+    """Celery Beat, hourly: catches anything the per-change jobs missed."""
+    return asyncio.run(_run_indexing(lambda ix, db, client: ix.reindex_stale(db, client)))

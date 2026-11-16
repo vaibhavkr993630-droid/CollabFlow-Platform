@@ -1,6 +1,9 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    # Postgres 16 with the pgvector extension, for task search by meaning. Debian-based,
+    # unlike the old postgres:16-alpine: a data volume created by the Alpine image needs
+    # `REINDEX DATABASE` once after switching, because text sorts differently.
+    image: pgvector/pgvector:pg16
     environment:
       POSTGRES_USER: collabflow
       POSTGRES_PASSWORD: collabflow

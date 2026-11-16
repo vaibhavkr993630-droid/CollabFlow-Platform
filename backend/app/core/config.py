@@ -71,6 +71,9 @@ class Settings(BaseSettings):
     assistant_model: str = "gemini-3.5-flash"
     # Tried once when the main model is busy, rate-limited or too slow. Empty disables it.
     assistant_fallback_model: str | None = "gemini-3.1-flash-lite"
+    # Turns task and comment text into meaning vectors for search. Never falls back to another
+    # model: vectors from different models cannot be compared. Changing it means a re-index.
+    assistant_embedding_model: str = "gemini-embedding-001"
     assistant_timeout_seconds: float = 30.0
     # How hard the model "thinks" before answering. "low" is ~3x faster and cheaper on quota for
     # summaries without losing accuracy (measured). Leave empty for providers without the option.

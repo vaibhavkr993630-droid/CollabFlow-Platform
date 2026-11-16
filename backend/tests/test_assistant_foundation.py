@@ -247,3 +247,56 @@ async def test_both_models_failing_gives_the_last_reason():
 
     with pytest.raises(AssistantUnavailableError, match="free quota"):
         await _client_with_backup(handler).complete(system="s", prompt="p")
+
+
+# --- embeddings --------------------------------------------------------------------------
+
+
+def _embed_client(handler) -> ChatCompletionsClient:
+    return ChatCompletionsClient(
+        base_url="https://provider.test/v1",
+        api_key="k",
+        model="m",
+        embedding_model="embed-model",
+        timeout_seconds=5,
+        transport=httpx.MockTransport(handler),
+    )
+
+
+async def test_embed_returns_vectors_in_input_order():
+    from app.models.search_document import EMBEDDING_DIMENSIONS
+
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        seen["body"] = json.loads(request.content)
+        # Google's compatible endpoint has no "index" field: order is the contract.
+        return httpx.Response(
+            200,
+            json={"data": [{"embedding": [float(n)] * EMBEDDING_DIMENSIONS} for n in (1, 2)]},
+        )
+
+    vectors = await _embed_client(handler).embed(["first", "second"])
+
+    assert [v[0] for v in vectors] == [1.0, 2.0]
+    assert seen["url"] == "https://provider.test/v1/embeddings"
+    assert seen["body"] == {
+        "model": "embed-model",
+        "input": ["first", "second"],
+        "dimensions": EMBEDDING_DIMENSIONS,
+    }
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        httpx.Response(200, json={"data": [{"embedding": [0.1, 0.2]}]}),  # wrong length
+        httpx.Response(200, json={"data": []}),  # wrong count
+        httpx.Response(503, text="busy"),
+    ],
+    ids=["wrong-length", "wrong-count", "server-error"],
+)
+async def test_embed_rejects_bad_replies(response: httpx.Response):
+    with pytest.raises(AssistantUnavailableError):
+        await _embed_client(lambda _request: response).embed(["one"])

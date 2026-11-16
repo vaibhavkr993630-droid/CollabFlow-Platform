@@ -23,6 +23,8 @@ class AssistantClient(Protocol):
         self, *, system: str, prompt: str, max_tokens: int = 1024, json_mode: bool = False
     ) -> str: ...
 
+    async def embed(self, texts: list[str]) -> list[list[float]]: ...
+
 
 class _RetryableError(AssistantUnavailableError):
     """Busy, rate-limited, timed out or unreachable: worth trying the backup model."""
@@ -37,12 +39,15 @@ class ChatCompletionsClient:
         model: str,
         timeout_seconds: float,
         fallback_model: str | None = None,
+        embedding_model: str | None = None,
         reasoning_effort: str | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self._url = f"{base_url.rstrip('/')}/chat/completions"
         self._api_key = api_key
         self._models = [model] + ([fallback_model] if fallback_model else [])
+        self._base_url = base_url.rstrip("/")
+        self._embedding_model = embedding_model
         self._timeout = timeout_seconds
         self._reasoning_effort = reasoning_effort
         self._transport = transport  # tests pass httpx.MockTransport; None means real network
@@ -119,3 +124,42 @@ class ChatCompletionsClient:
         if not text or not text.strip():
             raise AssistantUnavailableError("The assistant returned an empty reply.")
         return text.strip()
+
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        """
+        One meaning vector per text, in the same order. No backup model here on purpose:
+        vectors from two different models are not comparable, so mixing them would quietly
+        break search. Callers retry later instead (the hourly re-index job).
+        """
+        from app.models.search_document import EMBEDDING_DIMENSIONS
+
+        if not self._embedding_model:
+            raise AssistantUnavailableError("No embedding model is configured.")
+        try:
+            async with httpx.AsyncClient(
+                timeout=self._timeout, transport=self._transport
+            ) as http:
+                response = await http.post(
+                    f"{self._base_url}/embeddings",
+                    json={
+                        "model": self._embedding_model,
+                        "input": texts,
+                        "dimensions": EMBEDDING_DIMENSIONS,
+                    },
+                    headers={"Authorization": f"Bearer {self._api_key}"},
+                )
+        except httpx.HTTPError as exc:
+            raise AssistantUnavailableError("The assistant could not be reached.") from exc
+        if response.status_code >= 400:
+            logger.warning(
+                "Embedding provider error %s: %s", response.status_code, response.text[:300]
+            )
+            raise AssistantUnavailableError("The assistant returned an error.")
+        try:
+            # Google's compatible endpoint omits OpenAI's "index" field; items come back in order.
+            vectors = [item["embedding"] for item in response.json()["data"]]
+        except (ValueError, KeyError, TypeError) as exc:
+            raise AssistantUnavailableError("The assistant sent an unexpected reply.") from exc
+        if len(vectors) != len(texts) or any(len(v) != EMBEDDING_DIMENSIONS for v in vectors):
+            raise AssistantUnavailableError("The assistant sent vectors of the wrong shape.")
+        return vectors

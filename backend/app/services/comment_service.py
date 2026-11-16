@@ -3,6 +3,7 @@ import uuid
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.assistant.indexing_queue import queue_comment_indexing
 from app.core.mentions import extract_mentioned_emails
 from app.crud import comment as comment_crud
 from app.crud import project as project_crud
@@ -62,6 +63,7 @@ async def create_comment(
 
     await db.commit()
     await db.refresh(comment)
+    queue_comment_indexing(comment.id)
 
     await publish_event(
         redis,
