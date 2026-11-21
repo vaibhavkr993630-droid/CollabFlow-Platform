@@ -41,25 +41,50 @@ def require_assistant(
     return client
 
 
-async def enforce_daily_limit(
-    current_user: User = Depends(get_current_user),
-    redis: Redis = Depends(get_redis_client),
-) -> User:
+async def _count_against_limit(
+    redis: Redis, *, user: User, bucket: str, limit: int, what: str
+) -> None:
     """
-    Counts one assistant request for this user today (UTC) and refuses past the limit.
-    A Redis counter per user per day: INCR is atomic, so parallel requests cannot slip
-    past the limit, and the key expires on its own. Every attempt counts, including
-    ones the provider later fails, which keeps the check simple and the quota safe.
+    A Redis counter per user, per bucket, per UTC day. INCR is atomic, so parallel requests
+    cannot slip past the limit, and the key expires on its own. Every attempt counts,
+    including ones the provider later fails, which keeps the check simple and the quota safe.
     """
-    limit = get_settings().assistant_daily_limit
-    key = f"assistant:usage:{current_user.id}:{datetime.now(UTC).date().isoformat()}"
+    key = f"assistant:{bucket}:{user.id}:{datetime.now(UTC).date().isoformat()}"
     count = await redis.incr(key)
     if count == 1:
         await redis.expire(key, _SECONDS_IN_TWO_DAYS)
     if count > limit:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=f"You've reached today's limit of {limit} assistant requests. "
-            "It resets at midnight UTC.",
+            detail=f"You've reached today's limit of {limit} {what}. It resets at midnight UTC.",
         )
+
+
+async def enforce_daily_limit(
+    current_user: User = Depends(get_current_user),
+    redis: Redis = Depends(get_redis_client),
+) -> User:
+    """Text generation (summaries, task drafts): the scarce part of the free quota."""
+    await _count_against_limit(
+        redis,
+        user=current_user,
+        bucket="usage",
+        limit=get_settings().assistant_daily_limit,
+        what="assistant requests",
+    )
+    return current_user
+
+
+async def enforce_search_limit(
+    current_user: User = Depends(get_current_user),
+    redis: Redis = Depends(get_redis_client),
+) -> User:
+    """Search by meaning: one small vector call each, so it gets its own, larger budget."""
+    await _count_against_limit(
+        redis,
+        user=current_user,
+        bucket="search",
+        limit=get_settings().assistant_search_daily_limit,
+        what="smart searches",
+    )
     return current_user

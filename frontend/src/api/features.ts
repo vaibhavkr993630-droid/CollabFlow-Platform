@@ -1,9 +1,10 @@
 import { apiClient } from './client'
-import type { TaskPriority } from '../types'
+import type { TaskPriority, TaskStatus } from '../types'
 
 /** Optional features the server has switched on. Off features are hidden in the UI. */
 export interface Features {
   assistant: boolean
+  smart_search: boolean
 }
 
 export async function getFeatures(): Promise<Features> {
@@ -37,4 +38,27 @@ export async function draftTasks(projectId: string, text: string): Promise<TaskD
     { text },
   )
   return data.drafts
+}
+
+export interface SimilarTask {
+  id: string
+  title: string
+  status: TaskStatus
+  priority: TaskPriority
+  similarity: number
+  matched_in: 'task' | 'comment'
+  matched_text: string
+}
+
+/** Tasks close in meaning. 'duplicate' returns only very close matches, for the new-task hint. */
+export async function findSimilarTasks(
+  projectId: string,
+  q: string,
+  purpose: 'search' | 'duplicate' = 'search',
+): Promise<SimilarTask[]> {
+  const { data } = await apiClient.get<{ results: SimilarTask[] }>(
+    `/api/projects/${projectId}/tasks/similar`,
+    { params: { q, purpose } },
+  )
+  return data.results
 }

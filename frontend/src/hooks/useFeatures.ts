@@ -10,5 +10,8 @@ export function useFeatures() {
     // A server setting: it only changes on restart, so one fetch per session is enough.
     staleTime: Infinity,
   })
-  return { assistant: query.data?.assistant ?? false }
+  return {
+    assistant: query.data?.assistant ?? false,
+    smartSearch: query.data?.smart_search ?? false,
+  }
 }

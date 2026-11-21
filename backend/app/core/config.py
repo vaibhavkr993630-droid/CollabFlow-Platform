@@ -80,6 +80,9 @@ class Settings(BaseSettings):
     assistant_reasoning_effort: str | None = "low"
     # Requests per user per UTC day. Protects the provider's free quota, since sign-up is open.
     assistant_daily_limit: int = 30
+    # Searches by meaning per user per UTC day. Separate from the limit above, because a search
+    # is one small vector call, not text generation.
+    assistant_search_daily_limit: int = 200
 
     # CORS
     cors_origins: list[str] = ["http://localhost:5173"]

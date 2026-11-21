@@ -14,6 +14,8 @@ import { Layout } from '../components/Layout'
 import { MembersPanel } from '../components/MembersPanel'
 import { Modal } from '../components/Modal'
 import { NotesToTasks } from '../components/NotesToTasks'
+import { SimilarTaskHint } from '../components/SimilarTaskHint'
+import { SmartSearch } from '../components/SmartSearch'
 import { TaskDetailPanel } from '../components/TaskDetailPanel'
 import { useFeatures } from '../hooks/useFeatures'
 import { useProjectMembers } from '../hooks/useProjectMembers'
@@ -280,6 +282,11 @@ export default function ProjectPage() {
       {createTaskMutation.isError && (
         <p className="mb-3 text-sm text-red-600">{errorMessage(createTaskMutation.error)}</p>
       )}
+      <SimilarTaskHint
+        projectId={projectId}
+        title={newTaskTitle}
+        onOpenTask={setSelectedTaskId}
+      />
 
       <BoardFilters
         value={filters}
@@ -287,6 +294,7 @@ export default function ProjectPage() {
         members={members}
         labels={labelsQuery.data ?? []}
       />
+      <SmartSearch projectId={projectId} query={filters.search} onOpenTask={setSelectedTaskId} />
 
       {projectQuery.isLoading || tasksQuery.isLoading ? (
         <p className="text-sm text-gray-400">Loading tasks…</p>

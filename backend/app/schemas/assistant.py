@@ -3,7 +3,7 @@ from datetime import date
 
 from pydantic import BaseModel, Field
 
-from app.models.task import TaskPriority
+from app.models.task import TaskPriority, TaskStatus
 
 
 class ThreadSummaryRead(BaseModel):
@@ -28,3 +28,19 @@ class TaskDraft(BaseModel):
 
 class TaskDraftsRead(BaseModel):
     drafts: list[TaskDraft]
+
+
+class SimilarTask(BaseModel):
+    """A top-level task close in meaning to the query, with the text that matched best."""
+
+    id: uuid.UUID
+    title: str
+    status: TaskStatus
+    priority: TaskPriority
+    similarity: float
+    matched_in: str  # "task" or "comment"
+    matched_text: str
+
+
+class SimilarTasksRead(BaseModel):
+    results: list[SimilarTask]

@@ -26,7 +26,7 @@ async def test_features_report_assistant_off_without_key(
     monkeypatch.setattr(settings, "assistant_api_key", None)
     resp = await client.get("/api/features")
     assert resp.status_code == 200
-    assert resp.json() == {"assistant": False}
+    assert resp.json() == {"assistant": False, "smart_search": False}
 
 
 async def test_features_report_assistant_on_with_key(
@@ -34,7 +34,7 @@ async def test_features_report_assistant_on_with_key(
 ):
     monkeypatch.setattr(settings, "assistant_api_key", "test-key")
     resp = await client.get("/api/features")
-    assert resp.json() == {"assistant": True}
+    assert resp.json() == {"assistant": True, "smart_search": True}
 
 
 def test_require_assistant_refuses_when_off(monkeypatch: pytest.MonkeyPatch):
