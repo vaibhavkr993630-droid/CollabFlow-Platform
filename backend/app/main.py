@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.routers import (
     activity,
+    ask,
     attachments,
     auth,
     comments,
@@ -104,6 +105,7 @@ app.include_router(tasks.project_router)
 app.include_router(tasks.task_router)
 app.include_router(task_drafts.router)
 app.include_router(similar.router)
+app.include_router(ask.router)
 app.include_router(labels.router)
 app.include_router(comments.router)
 app.include_router(summaries.router)

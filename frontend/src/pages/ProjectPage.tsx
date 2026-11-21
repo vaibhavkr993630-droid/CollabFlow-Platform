@@ -7,6 +7,7 @@ import * as labelsApi from '../api/labels'
 import * as projectApi from '../api/projects'
 import * as taskApi from '../api/tasks'
 import { ActivityPanel } from '../components/ActivityPanel'
+import { AskProject } from '../components/AskProject'
 import { Avatar } from '../components/Avatar'
 import { BoardFilters } from '../components/BoardFilters'
 import { KanbanBoard } from '../components/KanbanBoard'
@@ -36,6 +37,7 @@ export default function ProjectPage() {
   const [showMembers, setShowMembers] = useState(false)
   const [showActivity, setShowActivity] = useState(false)
   const [showNotes, setShowNotes] = useState(false)
+  const [showAsk, setShowAsk] = useState(false)
   const features = useFeatures()
 
   const { members, byUserId, isLoading: membersLoading } = useProjectMembers(projectId)
@@ -246,6 +248,15 @@ export default function ProjectPage() {
           >
             Activity
           </button>
+          {features.smartSearch && (
+            <button
+              type="button"
+              onClick={() => setShowAsk(true)}
+              className="rounded-lg border border-brand-100 bg-brand-50 px-3 py-1.5 text-sm text-brand-700 hover:bg-brand-100"
+            >
+              Ask
+            </button>
+          )}
           {features.assistant && (
             <button
               type="button"
@@ -335,6 +346,18 @@ export default function ProjectPage() {
             members={members}
             isLoading={membersLoading}
             onInvite={(email, role) => inviteMutation.mutateAsync({ email, role })}
+          />
+        </Modal>
+      )}
+
+      {showAsk && (
+        <Modal title="Ask about this project" onClose={() => setShowAsk(false)} wide>
+          <AskProject
+            projectId={projectId}
+            onOpenTask={(taskId) => {
+              setShowAsk(false)
+              setSelectedTaskId(taskId)
+            }}
           />
         </Modal>
       )}

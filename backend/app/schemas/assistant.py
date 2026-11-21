@@ -44,3 +44,22 @@ class SimilarTask(BaseModel):
 
 class SimilarTasksRead(BaseModel):
     results: list[SimilarTask]
+
+
+class AskRequest(BaseModel):
+    question: str = Field(min_length=3, max_length=500)
+
+
+class AskSource(BaseModel):
+    """A task or comment the answer cited as [number]."""
+
+    number: int
+    task_id: uuid.UUID
+    task_title: str
+    kind: str  # "task" or "comment"
+    snippet: str
+
+
+class AskRead(BaseModel):
+    answer: str
+    sources: list[AskSource]

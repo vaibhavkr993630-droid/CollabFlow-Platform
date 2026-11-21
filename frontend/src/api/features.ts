@@ -62,3 +62,22 @@ export async function findSimilarTasks(
   )
   return data.results
 }
+
+export interface AskSource {
+  number: number
+  task_id: string
+  task_title: string
+  kind: 'task' | 'comment'
+  snippet: string
+}
+
+export interface AskAnswer {
+  answer: string
+  sources: AskSource[]
+}
+
+/** Answers a question from this project's own tasks and comments, citing them as [n]. */
+export async function askProject(projectId: string, question: string): Promise<AskAnswer> {
+  const { data } = await apiClient.post<AskAnswer>(`/api/projects/${projectId}/ask`, { question })
+  return data
+}
