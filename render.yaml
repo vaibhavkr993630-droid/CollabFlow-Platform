@@ -1,0 +1,49 @@
+# Render Blueprint: the API and its Redis-compatible store, both on Render's free plans.
+# The database is Neon (free Postgres with pgvector) and the frontend is on Vercel.
+#
+# Free-plan facts this file is written around:
+#   - a free web service sleeps when idle (the first request after a pause is slow);
+#   - there is no free background worker, so none is declared here;
+#   - there is no free object storage: attachments are off (the server starts without it);
+#   - pre-deploy commands are paid-only, so migrations are run once from a laptop
+#     (see the deployment checklist) instead of on every deploy.
+
+services:
+  - type: web
+    name: collabflow-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    region: ohio # same as the Neon database (AWS us-east-2) and the Key Value instance below
+    healthCheckPath: /health
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: DEBUG
+        value: "false"
+      - key: DATABASE_URL # the Neon DIRECT connection string, with the asyncpg driver and ?ssl=require
+        sync: false
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: collabflow-redis
+          property: connectionString
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: CORS_ORIGINS
+        value: '["https://frontend-flame-sigma-2zv4mlpsy0.vercel.app"]'
+      - key: FRONTEND_URL
+        value: https://frontend-flame-sigma-2zv4mlpsy0.vercel.app
+      # No object storage on a free plan. Points at nothing, so startup does not wait on it.
+      - key: S3_ENDPOINT_URL
+        value: http://localhost:9000
+      - key: ASSISTANT_API_KEY # optional; empty keeps the assistant features switched off
+        sync: false
+
+  - type: keyvalue
+    name: collabflow-redis
+    plan: free
+    region: ohio
+    maxmemoryPolicy: allkeys-lru # a free instance may restart and lose data; that is fine here
+    ipAllowList: [] # reachable only from other Render services, not from the internet

@@ -55,7 +55,12 @@ if settings.sentry_dsn:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
-    ensure_bucket_exists()
+    try:
+        ensure_bucket_exists()
+    except Exception as exc:
+        # Free hosts have no object storage. Nothing else needs it, so an unreachable bucket
+        # must not stop the server from starting: only attachments fail, when someone uses them.
+        logger.warning("File storage is unavailable; attachments will not work: %s", exc)
     redis = get_redis_client()
     project_listener = asyncio.create_task(
         run_pattern_listener(

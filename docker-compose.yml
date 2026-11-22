@@ -85,6 +85,9 @@ services:
       S3_ACCESS_KEY: collabflow
       S3_SECRET_KEY: collabflow123
       JWT_SECRET_KEY: change-me-in-production
+      # Optional text assistant. Read from your shell or a .env file next to this one
+      # (never committed); left empty, the assistant features stay switched off.
+      ASSISTANT_API_KEY: ${ASSISTANT_API_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy
