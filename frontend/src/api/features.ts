@@ -81,3 +81,18 @@ export async function askProject(projectId: string, question: string): Promise<A
   const { data } = await apiClient.post<AskAnswer>(`/api/projects/${projectId}/ask`, { question })
   return data
 }
+
+export interface ProjectDigest {
+  digest: string
+  days: number
+  activity_count: number
+  cached: boolean
+}
+
+/** A short recap of what changed in the project over the last `days` days (1 to 30). */
+export async function getProjectDigest(projectId: string, days: number): Promise<ProjectDigest> {
+  const { data } = await apiClient.post<ProjectDigest>(`/api/projects/${projectId}/digest`, {
+    days,
+  })
+  return data
+}

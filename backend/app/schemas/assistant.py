@@ -63,3 +63,14 @@ class AskSource(BaseModel):
 class AskRead(BaseModel):
     answer: str
     sources: list[AskSource]
+
+
+class DigestRequest(BaseModel):
+    days: int = Field(default=7, ge=1, le=30)
+
+
+class DigestRead(BaseModel):
+    digest: str
+    days: int
+    activity_count: int
+    cached: bool

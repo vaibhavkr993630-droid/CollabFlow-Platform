@@ -17,6 +17,7 @@ from app.api.routers import (
     attachments,
     auth,
     comments,
+    digest,
     features,
     labels,
     notifications,
@@ -106,6 +107,7 @@ app.include_router(tasks.task_router)
 app.include_router(task_drafts.router)
 app.include_router(similar.router)
 app.include_router(ask.router)
+app.include_router(digest.router)
 app.include_router(labels.router)
 app.include_router(comments.router)
 app.include_router(summaries.router)

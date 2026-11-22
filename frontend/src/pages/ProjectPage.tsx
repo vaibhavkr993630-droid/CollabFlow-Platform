@@ -18,6 +18,7 @@ import { NotesToTasks } from '../components/NotesToTasks'
 import { SimilarTaskHint } from '../components/SimilarTaskHint'
 import { SmartSearch } from '../components/SmartSearch'
 import { TaskDetailPanel } from '../components/TaskDetailPanel'
+import { WhatChanged } from '../components/WhatChanged'
 import { useFeatures } from '../hooks/useFeatures'
 import { useProjectMembers } from '../hooks/useProjectMembers'
 import { EMPTY_FILTERS, type BoardFilterState } from '../lib/boardFilters'
@@ -38,6 +39,7 @@ export default function ProjectPage() {
   const [showActivity, setShowActivity] = useState(false)
   const [showNotes, setShowNotes] = useState(false)
   const [showAsk, setShowAsk] = useState(false)
+  const [showDigest, setShowDigest] = useState(false)
   const features = useFeatures()
 
   const { members, byUserId, isLoading: membersLoading } = useProjectMembers(projectId)
@@ -260,6 +262,15 @@ export default function ProjectPage() {
           {features.assistant && (
             <button
               type="button"
+              onClick={() => setShowDigest(true)}
+              className="rounded-lg border border-brand-100 bg-brand-50 px-3 py-1.5 text-sm text-brand-700 hover:bg-brand-100"
+            >
+              What changed
+            </button>
+          )}
+          {features.assistant && (
+            <button
+              type="button"
               onClick={() => setShowNotes(true)}
               className="rounded-lg border border-brand-100 bg-brand-50 px-3 py-1.5 text-sm text-brand-700 hover:bg-brand-100"
             >
@@ -347,6 +358,12 @@ export default function ProjectPage() {
             isLoading={membersLoading}
             onInvite={(email, role) => inviteMutation.mutateAsync({ email, role })}
           />
+        </Modal>
+      )}
+
+      {showDigest && (
+        <Modal title="What changed" onClose={() => setShowDigest(false)} wide>
+          <WhatChanged projectId={projectId} />
         </Modal>
       )}
 
